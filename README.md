@@ -1,5 +1,4 @@
 # apod-photo-printer
-
 An Electron application with React
 
 ## Recommended IDE Setup
@@ -38,3 +37,5 @@ For additional support, please contact us. When contacting us, please tell us wh
 
 Account Email: changkook94@gmail.com
 Account ID: 324439dc-ec73-42a9-a46e-8fb6ab43a95f
+
+APOD 기반 포토카드 출력 서비스
