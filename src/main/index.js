@@ -4,7 +4,6 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 
 function createWindow() {
-  // 1. 현재 메인 모니터의 크기 정보를 가져옵니다.
   const primaryDisplay = screen.getPrimaryDisplay()
   const { width, height } = primaryDisplay.workAreaSize
 
@@ -14,7 +13,13 @@ function createWindow() {
     x: 0,
     y: 0,
     show: false,
+    
+    // ★ [수정] 완벽한 키오스크 환경을 위한 옵션 추가
+    kiosk: true,         // 빠져나갈 수 없는 전체화면 모드
+    fullscreen: true,    // 전체화면
+    alwaysOnTop: true,   // 다른 프로그램보다 항상 위에 표시
     autoHideMenuBar: true,
+    
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -38,15 +43,12 @@ function createWindow() {
   }
 }
 
-// ▼▼▼ [추가 1] 프린터 목록 가져오기 핸들러 ▼▼▼
 ipcMain.handle('get-printers', async (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return [];
-  // Electron에서 연결된 프린터 목록을 반환합니다.
   return await win.webContents.getPrintersAsync();
 });
 
-// ▼▼▼ [수정] 출력 요청 처리기 (프린터 이름 지원) ▼▼▼
 ipcMain.handle('print-silent', async (event, printerName) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return { success: false };
@@ -55,11 +57,10 @@ ipcMain.handle('print-silent', async (event, printerName) => {
     const options = {
       silent: true,
       printBackground: true,
-      deviceName: printerName || '', // ★ 전달받은 프린터 이름 사용 (없으면 기본값)
+      deviceName: printerName || '', 
       margins: { marginType: 'none' }
     };
 
-    // 실제 프린터가 연결되어 있지 않은 개발 환경에서는 PDF 저장이 될 수도 있습니다.
     win.webContents.print(options, (success, errorType) => {
       if (!success) console.error("Print failed:", errorType);
     });
