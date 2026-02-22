@@ -4,7 +4,7 @@ import { toPng, toBlob } from 'html-to-image';
 import { isElectron } from '../utils/env';
 
 // ★ [추가] 출력물 및 캡처용 다크 로고 불러오기
-import logoDark from '../assets/logo_dark.jpg'; 
+import logoDark from '../assets/logo_dark.png'; 
 
 const ResultScreen = ({ data, onHome }) => {
   const [isPrinting, setIsPrinting] = useState(false);

@@ -1,7 +1,7 @@
 import React from 'react';
 import { isElectron } from '../utils/env';
 // ★ [핵심] 이미지를 변수로 import 해옵니다.
-import logoWhite from '../assets/logo_white.jpg'; 
+import logoWhite from '../assets/logo_white.png'; 
 
 const HomeScreen = ({ onStart, onAdminClick }) => {
   const handleExit = (e) => {
