@@ -106,7 +106,7 @@ function App() {
             <p className="mb-6 text-gray-400 text-center">설정에 진입하려면<br/>비밀번호를 입력하세요.</p>
             <input 
               type="password" 
-              placeholder="비밀번호 (1234)"
+              placeholder="비밀번호"
               // ★ [수정] 배경, 굵은 테두리, 포커스 시 발광 효과 추가
               className="w-full bg-white text-black p-4 rounded-xl text-center text-2xl font-bold mb-6 border-4 border-gray-600 focus:border-blue-500 outline-none shadow-inner transition-all placeholder-gray-400"
               autoFocus
