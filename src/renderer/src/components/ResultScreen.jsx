@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { toPng, toBlob } from 'html-to-image';
 import { isElectron } from '../utils/env';
@@ -9,7 +9,10 @@ const ResultScreen = ({ data, onHome }) => {
   const [orientation, setOrientation] = useState('portrait');
   const [isMobile, setIsMobile] = useState(false);
   const [isCapturing, setIsCapturing] = useState(true); 
-  const [localImageUrl, setLocalImageUrl] = useState(null);
+  
+  // ★ [핵심 추가] img 태그 대신 사용할 캔버스 참조
+  const imageCanvasRef = useRef(null);
+  const [imgLoaded, setImgLoaded] = useState(false);
 
   useEffect(() => {
     const savedPaperSize = localStorage.getItem('target_paper_size');
@@ -40,37 +43,42 @@ const ResultScreen = ({ data, onHome }) => {
     };
   }, [onHome]);
 
-  // ★ [핵심 변경] 이미지를 Blob(임시파일)이 아니라 Base64(텍스트)로 변환합니다.
+  // ★ [핵심 변경] 이미지를 가져와서 <img>가 아닌 <canvas>에 직접 물감처럼 그려버립니다.
   useEffect(() => {
     if (!data) return;
+    if (data.media_type !== 'image') {
+      setIsCapturing(false);
+      return;
+    }
     
     const rawUrl = data.url || data.hdurl;
+    // 고화질 + CORS가 완벽하게 뚫려있는 wsrv.nl 프록시 사용
     const proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(rawUrl)}&w=1200&q=90&output=jpg`;
 
     setIsCapturing(true); 
 
-    fetch(proxyUrl)
-      .then(response => {
-        if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
-        return response.blob();
-      })
-      .then(blob => {
-        // Blob 데이터를 브라우저가 읽어서 Base64 텍스트로 변환
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setLocalImageUrl(reader.result); // data:image/jpeg;base64,... 형태의 문자열
-          setIsCapturing(false); 
-        };
-        reader.onerror = () => {
-          throw new Error("파일 읽기 실패");
-        };
-        reader.readAsDataURL(blob);
-      })
-      .catch(err => {
-        console.error("이미지 Base64 변환 실패:", err);
-        setLocalImageUrl(proxyUrl); // 실패 시 최후의 보루로 프록시 URL 사용
+    const img = new Image();
+    img.crossOrigin = 'anonymous'; // 프록시 서버에 CORS 권한 요청
+    
+    // 이미지가 성공적으로 다운로드되면 캔버스에 픽셀을 복사합니다.
+    img.onload = () => {
+      const canvas = imageCanvasRef.current;
+      if (canvas) {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0); // 캔버스에 그림 그리기 완료!
+        setImgLoaded(true);
         setIsCapturing(false);
-      });
+      }
+    };
+    
+    img.onerror = (err) => {
+      console.error("캔버스 이미지 드로잉 실패:", err);
+      setIsCapturing(false);
+    };
+    
+    img.src = proxyUrl; // 다운로드 시작
   }, [data]);
 
   if (!data) return <div>데이터 로딩 실패</div>;
@@ -95,17 +103,20 @@ const ResultScreen = ({ data, onHome }) => {
     }
   };
 
-  // html-to-image 공통 옵션
+  // ★ 모바일 캡처 시 방해되는 외부 폰트/스타일 로딩을 싹 다 차단하는 강력한 옵션
   const getCaptureOptions = () => ({
     backgroundColor: '#ffffff',
-    pixelRatio: isMobile ? 1 : 2, // 모바일 메모리 부하 방지
-    skipFonts: true, // 폰트 로딩 에러 방지
-    style: { margin: '0', padding: '4mm' }
+    pixelRatio: isMobile ? 1 : 2,
+    style: { margin: '0', padding: '4mm' },
+    // LINK(외부 폰트/CSS)를 캡처 도화지에 복사하지 않게 막아서 Event 에러를 원천 봉쇄합니다.
+    filter: (node) => {
+      if (node?.tagName === 'LINK' || node?.tagName === 'STYLE') return false;
+      return true;
+    }
   });
 
-  // 에러 메시지 추출 헬퍼 함수
   const getErrorMessage = (error) => {
-    if (error instanceof Event) return "이미지 또는 폰트 렌더링 이벤트 에러 (Event)";
+    if (error instanceof Event) return "브라우저 보안 정책에 의한 렌더링 차단 (Event Error)";
     if (error?.message) return error.message;
     return JSON.stringify(error) || "알 수 없는 에러";
   };
@@ -113,7 +124,7 @@ const ResultScreen = ({ data, onHome }) => {
   const handleDownloadImage = async () => {
     if (isCapturing) return;
     setIsCapturing(true);
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise(resolve => setTimeout(resolve, 200));
 
     try {
       const printArea = document.getElementById('print-area');
@@ -127,7 +138,7 @@ const ResultScreen = ({ data, onHome }) => {
       link.click();
     } catch (error) {
       console.error('이미지 저장 에러:', error);
-      alert(`[저장 실패]\n${getErrorMessage(error)}`);
+      alert(`[저장 실패]\n${getErrorMessage(error)}\n\n이 메시지를 캡처해서 알려주세요!`);
     } finally {
       setIsCapturing(false);
     }
@@ -143,7 +154,7 @@ const ResultScreen = ({ data, onHome }) => {
     }
 
     setIsCapturing(true);
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise(resolve => setTimeout(resolve, 200));
 
     try {
       const printArea = document.getElementById('print-area');
@@ -194,13 +205,13 @@ const ResultScreen = ({ data, onHome }) => {
                         print:border-0 print:rounded-none print:shadow-none print:bg-white
                         ${isLandscape ? 'w-full md:w-[65%] mb-0' : 'w-full mb-2 print:mb-4'}`}>
           {data.media_type === 'image' ? (
-             // ★ [핵심 변경] crossOrigin 속성을 완전히 제거했습니다. (Base64 데이터는 내장 텍스트라 보안 정책을 타지 않습니다)
-            <img 
-              src={localImageUrl} 
-              alt={data.title} 
+             // ★ [최종 병기] <img> 태그를 완전히 삭제하고, 자바스크립트로 직접 그려낸 <canvas>를 배치합니다.
+             // 캔버스도 object-contain이 완벽하게 적용되어 이미지처럼 똑같이 보입니다!
+            <canvas 
+              ref={imageCanvasRef}
               className={`max-w-full object-contain print:object-contain transition-opacity duration-500
               ${isLandscape ? 'max-h-[50vh] md:max-h-[80vh] print:max-h-[90vh]' : 'max-h-[50vh] md:max-h-[60vh] print:max-h-[65vh]'}
-              ${localImageUrl ? 'opacity-100' : 'opacity-0'}`} 
+              ${imgLoaded ? 'opacity-100' : 'opacity-0'}`} 
             />
           ) : (
             <div className="text-center p-10 flex flex-col items-center justify-center h-full print:text-black min-h-[300px]">
