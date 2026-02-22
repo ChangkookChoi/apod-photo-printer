@@ -1,6 +1,18 @@
 import React from 'react';
+import { isElectron } from '../utils/env'; // ★ [추가] 환경 감지 유틸리티 임포트
 
 const HomeScreen = ({ onStart, onAdminClick }) => {
+  
+  // ★ [추가] 앱 종료 핸들러
+  const handleExit = (e) => {
+    e.stopPropagation(); // 부모(배경) 클릭 이벤트로 전파되는 것 방지
+    
+    // 실수로 터치해서 꺼지는 것을 방지하기 위한 확인 창
+    if (window.confirm("키오스크 프로그램을 종료하시겠습니까?")) {
+      window.close(); // Electron 창 닫기 (표준 종료 방법)
+    }
+  };
+
   return (
     <div 
       onClick={onStart}
@@ -30,10 +42,24 @@ const HomeScreen = ({ onStart, onAdminClick }) => {
       </div>
 
       <div className="absolute bottom-8 right-8 text-white/50 text-sm z-20">
+        Created by With Light
         Powered by NASA APOD API
       </div>
 
-      {/* ▼▼▼ [추가] 관리자 버튼 (좌측 하단) ▼▼▼ */}
+      {/* ▼▼▼ [추가] 앱 종료 버튼 (우측 상단, Electron 환경에서만 표시) ▼▼▼ */}
+      {isElectron() && (
+        <button 
+          onClick={handleExit}
+          className="absolute top-8 right-8 z-30 text-white/30 hover:text-white/80 transition p-3 bg-black/20 hover:bg-black/50 rounded-full"
+          title="프로그램 종료"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      )}
+
+      {/* 관리자 버튼 (좌측 하단) */}
       <button 
         onClick={(e) => {
           e.stopPropagation(); // 부모 클릭 이벤트 방지
