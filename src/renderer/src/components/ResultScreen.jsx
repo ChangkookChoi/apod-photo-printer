@@ -100,18 +100,14 @@ const ResultScreen = ({ data, onHome }) => {
     }
   };
 
+  // ★ [수정] 캡처 시 카드 외부 배경이 보이지 않도록 옵션 최적화
   const getCaptureOptions = () => ({
-    backgroundColor: '#111827',
+    backgroundColor: '#f9f9f7', // 카드 배경색과 동일하게 설정하여 경계선 문제 방지
     pixelRatio: 2,
     skipFonts: true,
     style: {
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
       margin: '0',
-      padding: '40px',
-      width: 'auto',
-      height: 'auto'
+      padding: '0', // 쏠림 및 배경 노출 방지를 위해 패딩 제거
     }
   });
 
@@ -121,7 +117,6 @@ const ResultScreen = ({ data, onHome }) => {
     return JSON.stringify(error) || "알 수 없는 에러";
   };
 
-  // ★ [수정] 모바일 갤러리 저장을 위한 핸들러
   const handleDownloadImage = async () => {
     if (isCapturing) return;
     setIsCapturing(true);
@@ -131,7 +126,6 @@ const ResultScreen = ({ data, onHome }) => {
       const printArea = document.getElementById('print-area');
       if (!printArea) throw new Error("캡처 영역 누락");
 
-      // 모바일인 경우 navigator.share를 활용해 '이미지 저장' 유도
       if (isMobile && navigator.share) {
         const blob = await toBlob(printArea, getCaptureOptions());
         const file = new File([blob], `APOD_Photocard_${data.date}.png`, { type: 'image/png' });
@@ -145,7 +139,6 @@ const ResultScreen = ({ data, onHome }) => {
           throw new Error("파일 공유 미지원");
         }
       } else {
-        // PC 환경에서는 기존 방식대로 파일 다운로드
         const dataUrl = await toPng(printArea, getCaptureOptions());
         const link = document.createElement('a');
         link.download = `APOD_Photocard_${data.date}.png`;
@@ -154,7 +147,6 @@ const ResultScreen = ({ data, onHome }) => {
       }
     } catch (error) {
       console.error('이미지 저장 에러:', error);
-      // 공유 API 실패 시 일반 다운로드 시도
       try {
         const printArea = document.getElementById('print-area');
         const dataUrl = await toPng(printArea, getCaptureOptions());
@@ -218,14 +210,15 @@ const ResultScreen = ({ data, onHome }) => {
         }
       `}</style>
 
-      <div 
-        id="print-area" 
-        className="my-auto w-fit flex flex-col items-center justify-center relative bg-transparent print:bg-white mx-auto"
-      >
-        <div className="bg-[#f9f9f7] shadow-[0_20px_50px_rgba(0,0,0,0.5)] print:shadow-none border border-white/20 print:border-0
+      {/* ★ [수정] id="print-area"를 실제 카드 div에 직접 부여하여 캡처 범위를 고정 */}
+      <div className="my-auto w-fit flex flex-col items-center justify-center relative bg-transparent mx-auto">
+        <div 
+          id="print-area" 
+          className="bg-[#f9f9f7] shadow-[0_20px_50px_rgba(0,0,0,0.5)] print:shadow-none border border-white/20 print:border-0
                         w-[85vw] sm:w-[65vw] md:w-[50vw] lg:w-[35vw] xl:w-[28vw]
-                        p-4 md:p-6 pb-12 md:pb-20 flex flex-col items-center">
-          
+                        p-4 md:p-6 pb-12 md:pb-20 flex flex-col items-center"
+        >
+          {/* 1. 이미지 영역 */}
           <div className="w-full aspect-square bg-black overflow-hidden relative mb-6 md:mb-10 shadow-[inset_0_2px_10px_rgba(0,0,0,0.8)]">
             {data.media_type === 'image' ? (
               <canvas 
@@ -241,8 +234,9 @@ const ResultScreen = ({ data, onHome }) => {
             )}
           </div>
 
+          {/* 2. 하단 정보 영역 */}
           <div className="w-full flex justify-between items-end px-1 gap-6">
-            <div className="flex flex-col flex-1 min-w-0"> 
+            <div className="flex flex-col flex-1 min-w-0 text-left"> 
               <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-gray-900 break-keep leading-tight mb-2 tracking-tighter">
                 {data.title}
               </h2>
@@ -250,8 +244,9 @@ const ResultScreen = ({ data, onHome }) => {
                 {data.date}
               </p>
               <div className="text-[10px] md:text-xs lg:text-sm text-gray-400 font-medium leading-snug uppercase tracking-widest">
-                {data.copyright && <p className="truncate">ⓒ {data.copyright}</p>}
-                <p>NASA ASTRONOMY PICTURE</p>
+                {data.copyright && <p className="truncate text-left">ⓒ {data.copyright}</p>}
+                {/* ★ [문구 수정] 기존 요청하신 문구 유지 */}
+                <p className="text-left">Powered by NASA APOD</p>
               </div>
             </div>
 
