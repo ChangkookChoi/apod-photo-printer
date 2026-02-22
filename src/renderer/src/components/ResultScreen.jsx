@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { QRCodeCanvas } from 'qrcode.react';
-import { toPng, toBlob } from 'html-to-image'; // ★ [변경] html-to-image 엔진으로 교체!
+import { toPng, toBlob } from 'html-to-image';
 import { isElectron } from '../utils/env';
 
 const ResultScreen = ({ data, onHome }) => {
@@ -40,6 +40,7 @@ const ResultScreen = ({ data, onHome }) => {
     };
   }, [onHome]);
 
+  // ★ [핵심 변경] 이미지를 Blob(임시파일)이 아니라 Base64(텍스트)로 변환합니다.
   useEffect(() => {
     if (!data) return;
     
@@ -54,21 +55,22 @@ const ResultScreen = ({ data, onHome }) => {
         return response.blob();
       })
       .then(blob => {
-        const localUrl = URL.createObjectURL(blob);
-        setLocalImageUrl(localUrl);
-        setIsCapturing(false); 
+        // Blob 데이터를 브라우저가 읽어서 Base64 텍스트로 변환
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setLocalImageUrl(reader.result); // data:image/jpeg;base64,... 형태의 문자열
+          setIsCapturing(false); 
+        };
+        reader.onerror = () => {
+          throw new Error("파일 읽기 실패");
+        };
+        reader.readAsDataURL(blob);
       })
       .catch(err => {
-        console.error("이미지 로컬 프리로딩 실패:", err);
-        setLocalImageUrl(proxyUrl);
+        console.error("이미지 Base64 변환 실패:", err);
+        setLocalImageUrl(proxyUrl); // 실패 시 최후의 보루로 프록시 URL 사용
         setIsCapturing(false);
       });
-
-    return () => {
-      if (localImageUrl) {
-        URL.revokeObjectURL(localImageUrl);
-      }
-    };
   }, [data]);
 
   if (!data) return <div>데이터 로딩 실패</div>;
@@ -93,28 +95,30 @@ const ResultScreen = ({ data, onHome }) => {
     }
   };
 
-  // ★ [추가] html-to-image 공통 옵션 (해상도 등)
+  // html-to-image 공통 옵션
   const getCaptureOptions = () => ({
     backgroundColor: '#ffffff',
-    pixelRatio: isMobile ? 1 : 2,
-    style: {
-      margin: '0',
-      padding: '4mm'
-    }
+    pixelRatio: isMobile ? 1 : 2, // 모바일 메모리 부하 방지
+    skipFonts: true, // 폰트 로딩 에러 방지
+    style: { margin: '0', padding: '4mm' }
   });
+
+  // 에러 메시지 추출 헬퍼 함수
+  const getErrorMessage = (error) => {
+    if (error instanceof Event) return "이미지 또는 폰트 렌더링 이벤트 에러 (Event)";
+    if (error?.message) return error.message;
+    return JSON.stringify(error) || "알 수 없는 에러";
+  };
 
   const handleDownloadImage = async () => {
     if (isCapturing) return;
     setIsCapturing(true);
-    
-    // UI 업데이트 시간을 벌기 위한 약간의 딜레이
     await new Promise(resolve => setTimeout(resolve, 150));
 
     try {
       const printArea = document.getElementById('print-area');
-      if (!printArea) throw new Error("캡처할 영역을 찾을 수 없습니다.");
+      if (!printArea) throw new Error("캡처 영역 누락");
 
-      // ★ [변경] toPng를 이용해 한 번에 Base64 이미지로 굽기
       const dataUrl = await toPng(printArea, getCaptureOptions());
       
       const link = document.createElement('a');
@@ -123,7 +127,7 @@ const ResultScreen = ({ data, onHome }) => {
       link.click();
     } catch (error) {
       console.error('이미지 저장 에러:', error);
-      alert(`[오류 상세] 저장 실패\n${error.message || error}`);
+      alert(`[저장 실패]\n${getErrorMessage(error)}`);
     } finally {
       setIsCapturing(false);
     }
@@ -134,9 +138,7 @@ const ResultScreen = ({ data, onHome }) => {
     
     if (!navigator.canShare) {
       alert('현재 브라우저에서는 공유 기능을 지원하지 않습니다.\n(웹사이트 링크만 복사됩니다.)');
-      try {
-        await navigator.share({ title: '우주에서 온 내 생일 사진', url: window.location.href });
-      } catch(e) {}
+      try { await navigator.share({ title: '우주에서 온 내 생일 사진', url: window.location.href }); } catch(e) {}
       return;
     }
 
@@ -145,11 +147,10 @@ const ResultScreen = ({ data, onHome }) => {
 
     try {
       const printArea = document.getElementById('print-area');
-      if (!printArea) throw new Error("캡처할 영역을 찾을 수 없습니다.");
+      if (!printArea) throw new Error("캡처 영역 누락");
 
-      // ★ [변경] toBlob을 이용해 파일 형태로 바로 뽑아내기
       const blob = await toBlob(printArea, getCaptureOptions());
-      if (!blob) throw new Error("이미지 파일(Blob) 생성에 실패했습니다.");
+      if (!blob) throw new Error("이미지 파일(Blob) 생성 실패");
       
       const file = new File([blob], `APOD_Photocard_${data.date}.png`, { type: 'image/png' });
 
@@ -160,10 +161,8 @@ const ResultScreen = ({ data, onHome }) => {
       }
     } catch (error) {
       console.error('공유 에러:', error);
-      alert(`[오류 상세] 공유 실패\n${error.message || error}`);
-      try {
-         await navigator.share({ title: '우주에서 온 내 생일 사진', url: window.location.href });
-      } catch (e) {}
+      alert(`[공유 실패]\n${getErrorMessage(error)}\n\n(대신 링크 공유를 시도합니다)`);
+      try { await navigator.share({ title: '우주에서 온 내 생일 사진', url: window.location.href }); } catch (e) {}
     } finally {
       setIsCapturing(false);
     }
@@ -195,10 +194,10 @@ const ResultScreen = ({ data, onHome }) => {
                         print:border-0 print:rounded-none print:shadow-none print:bg-white
                         ${isLandscape ? 'w-full md:w-[65%] mb-0' : 'w-full mb-2 print:mb-4'}`}>
           {data.media_type === 'image' ? (
+             // ★ [핵심 변경] crossOrigin 속성을 완전히 제거했습니다. (Base64 데이터는 내장 텍스트라 보안 정책을 타지 않습니다)
             <img 
               src={localImageUrl} 
               alt={data.title} 
-              crossOrigin="anonymous" 
               className={`max-w-full object-contain print:object-contain transition-opacity duration-500
               ${isLandscape ? 'max-h-[50vh] md:max-h-[80vh] print:max-h-[90vh]' : 'max-h-[50vh] md:max-h-[60vh] print:max-h-[65vh]'}
               ${localImageUrl ? 'opacity-100' : 'opacity-0'}`} 
@@ -236,7 +235,7 @@ const ResultScreen = ({ data, onHome }) => {
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            {isCapturing ? '이미지 생성 중...' : '출력 처리 중...'}
+            {isCapturing ? '데이터를 준비 중입니다...' : '출력 처리 중...'}
           </div>
         ) : (
           <>
