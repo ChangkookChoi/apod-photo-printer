@@ -7,9 +7,10 @@ const ResultScreen = ({ data, onHome }) => {
   const [isPrinting, setIsPrinting] = useState(false);
   const [paperSize, setPaperSize] = useState('auto');
   const [orientation, setOrientation] = useState('portrait');
-  
-  // ★ [추가] 접속한 기기가 모바일(스마트폰, 태블릿)인지 감지
   const [isMobile, setIsMobile] = useState(false);
+  
+  // ★ [추가] 캡처 중일 때 버튼을 로딩 상태로 만들기 위한 상태값
+  const [isCapturing, setIsCapturing] = useState(false); 
 
   useEffect(() => {
     const savedPaperSize = localStorage.getItem('target_paper_size');
@@ -18,7 +19,6 @@ const ResultScreen = ({ data, onHome }) => {
     const savedOrientation = localStorage.getItem('target_orientation');
     setOrientation(savedOrientation || 'portrait');
 
-    // UserAgent를 통해 모바일 기기 감지
     const mobileCheck = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     setIsMobile(mobileCheck);
 
@@ -63,39 +63,74 @@ const ResultScreen = ({ data, onHome }) => {
     }
   };
 
-  const handleDownloadImage = async () => {
+  // ★ [추가] 화면을 캔버스로 구워내는 공통 함수 (CORS 이슈 해결)
+  const generateCanvas = async () => {
     const printArea = document.getElementById('print-area');
-    if (!printArea) return;
+    if (!printArea) throw new Error("캡처할 영역을 찾을 수 없습니다.");
     
+    return await html2canvas(printArea, { 
+      useCORS: true, 
+      allowTaint: true, // 외부 이미지 허용 보조 옵션
+      backgroundColor: '#ffffff',
+      scale: 2 
+    });
+  };
+
+  // 1. 이미지 다운로드 핸들러
+  const handleDownloadImage = async () => {
+    if (isCapturing) return;
+    setIsCapturing(true);
     try {
-      const canvas = await html2canvas(printArea, { 
-        useCORS: true, 
-        backgroundColor: '#ffffff',
-        scale: 2 // 고화질 캡처를 위해 해상도 2배 확대
-      });
+      const canvas = await generateCanvas();
       const link = document.createElement('a');
       link.download = `APOD_Photocard_${data.date}.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
     } catch (error) {
       console.error('이미지 저장 에러:', error);
-      alert('이미지 저장에 실패했습니다.');
+      alert('이미지 캡처 중 오류가 발생했습니다.');
+    } finally {
+      setIsCapturing(false);
     }
   };
 
+  // 2. ★ [수정] 이미지를 파일로 만들어서 카카오톡 등으로 전송하는 공유 핸들러
   const handleShare = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: '우주에서 온 내 생일 사진',
-          text: `${data.title} - 나만의 우주 포토카드를 확인해보세요!`,
-          url: window.location.href, 
-        });
-      } catch (error) {
-        console.log('공유가 취소되었거나 에러가 발생했습니다.', error);
-      }
-    } else {
-      alert('현재 브라우저에서는 공유하기 기능을 지원하지 않습니다.\n대신 URL을 복사해주세요!');
+    if (isCapturing) return;
+    setIsCapturing(true);
+
+    try {
+      const canvas = await generateCanvas();
+      
+      // 캔버스를 Blob(파일 데이터) 형태로 변환
+      canvas.toBlob(async (blob) => {
+        if (!blob) throw new Error("이미지 변환 실패");
+        
+        // Blob을 실제 파일 객체로 만들기
+        const file = new File([blob], `APOD_Photocard_${data.date}.png`, { type: 'image/png' });
+
+        // 브라우저가 '파일' 공유 기능을 지원하는지 체크
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: '우주에서 온 내 생일 사진',
+            text: `${data.title} - 나만의 우주 포토카드를 확인해보세요!`,
+            files: [file], // ★ 텍스트/링크 대신 진짜 캡처된 이미지 파일을 던짐!
+          });
+        } else {
+          // 파일 공유를 지원하지 않는 옛날 폰/브라우저일 경우의 대비책 (링크만 공유)
+          await navigator.share({
+            title: '우주에서 온 내 생일 사진',
+            text: `${data.title} - 나만의 우주 포토카드를 확인해보세요!`,
+            url: window.location.href, 
+          });
+        }
+        setIsCapturing(false);
+      }, 'image/png');
+      
+    } catch (error) {
+      console.error('공유 에러:', error);
+      alert('공유하기 기능을 실행할 수 없습니다.');
+      setIsCapturing(false);
     }
   };
 
@@ -121,22 +156,20 @@ const ResultScreen = ({ data, onHome }) => {
         }
       `}</style>
 
-      {/* [모바일/태블릿 반응형 핵심] 
-        가로 모드(isLandscape)일 때, 데스크탑(md:) 이상에서는 좌우(flex-row)로 배치되지만,
-        모바일에서는 폭이 좁으므로 강제로 위아래(flex-col)로 쌓이도록 반응형 클래스 적용.
-        (프린트나 캡처 시에는 설정된 가로/세로 방향을 엄격하게 유지함)
-      */}
       <div id="print-area" className={`w-full flex items-center print:text-black bg-gray-900 print:bg-white p-4 rounded-xl
             ${isLandscape ? 'max-w-5xl flex-col md:flex-row gap-4 md:gap-8' : 'max-w-4xl flex-col gap-4'}`}>
         
-        {/* [이미지 영역] */}
         <div className={`relative flex items-center justify-center bg-black rounded-3xl overflow-hidden shadow-2xl border border-gray-700 
                         print:border-0 print:rounded-none print:shadow-none print:bg-white
                         ${isLandscape ? 'w-full md:w-[65%] mb-0' : 'w-full mb-2 print:mb-4'}`}>
           {data.media_type === 'image' ? (
-            <img src={data.url || data.hdurl} alt={data.title} 
-                 className={`max-w-full object-contain print:object-contain 
-                 ${isLandscape ? 'max-h-[50vh] md:max-h-[80vh] print:max-h-[90vh]' : 'max-h-[50vh] md:max-h-[60vh] print:max-h-[65vh]'}`} />
+            <img 
+              src={data.url || data.hdurl} 
+              alt={data.title} 
+              crossOrigin="anonymous" // ★ [핵심] CORS 보안 에러 방지를 위해 추가!
+              className={`max-w-full object-contain print:object-contain 
+              ${isLandscape ? 'max-h-[50vh] md:max-h-[80vh] print:max-h-[90vh]' : 'max-h-[50vh] md:max-h-[60vh] print:max-h-[65vh]'}`} 
+            />
           ) : (
             <div className="text-center p-10 flex flex-col items-center justify-center h-full print:text-black min-h-[300px]">
               <p className="text-4xl mb-4">🎥</p>
@@ -145,7 +178,6 @@ const ResultScreen = ({ data, onHome }) => {
           )}
         </div>
 
-        {/* [텍스트 및 QR 영역] */}
         <div className={`relative flex items-center 
             ${isLandscape ? 'w-full md:w-[35%] flex-col text-center space-y-4 md:space-y-6' : 'w-full justify-center mb-4 print:mb-0 print:px-4'}`}>
           <div className={`z-10 ${isLandscape ? 'px-0' : 'text-center px-4 md:px-20 print:px-4'}`}> 
@@ -164,11 +196,10 @@ const ResultScreen = ({ data, onHome }) => {
         </div>
       </div>
 
-      {/* [스마트 버튼 영역] */}
       <div className="flex flex-wrap justify-center gap-3 md:gap-4 mt-6 md:mt-10 mb-8 print:hidden z-50">
-        {isPrinting ? (
+        {isPrinting || isCapturing ? (
           <div className="px-6 py-3 bg-blue-600 rounded-xl font-bold text-white animate-pulse text-sm md:text-base">
-            🖨️ 처리 중입니다. 잠시 후 처음으로 돌아갑니다...
+            {isCapturing ? '📸 이미지를 생성하고 있습니다...' : '🖨️ 처리 중입니다. 잠시 후 처음으로 돌아갑니다...'}
           </div>
         ) : (
           <>
@@ -176,29 +207,24 @@ const ResultScreen = ({ data, onHome }) => {
               처음으로
             </button>
             
-            {/* 1. 키오스크(EXE) 환경: 출력 버튼만 표시 */}
             {isElectron() && (
               <button onClick={handlePrint} className="px-6 md:px-10 py-3 bg-blue-600 rounded-xl font-bold hover:bg-blue-500 transition shadow-lg shadow-blue-500/30 text-sm md:text-base">
                 포토카드 출력하기
               </button>
             )}
 
-            {/* 2. 일반 웹 환경 (데스크탑 PC & 모바일) */}
             {!isElectron() && (
               <>
-                {/* 데스크탑에서만 인쇄 테스트를 할 수 있도록 버튼 노출 */}
                 {!isMobile && (
                   <button onClick={handlePrint} className="px-6 py-3 bg-blue-600 rounded-xl font-bold hover:bg-blue-500 transition shadow-lg text-sm md:text-base">
                     인쇄 / PDF 저장
                   </button>
                 )}
                 
-                {/* 이미지 저장은 모바일/PC 모두 사용 가능 */}
                 <button onClick={handleDownloadImage} className="px-5 md:px-6 py-3 bg-green-600 rounded-xl font-bold hover:bg-green-500 transition shadow-lg flex items-center gap-2 text-sm md:text-base">
                   <span>📥</span> 이미지로 저장
                 </button>
 
-                {/* 공유하기는 모바일에서만 노출 (PC는 Web Share API 미지원 브라우저가 많음) */}
                 {isMobile && (
                   <button onClick={handleShare} className="px-5 py-3 bg-indigo-600 rounded-xl font-bold hover:bg-indigo-500 transition shadow-lg flex items-center gap-2 text-sm md:text-base">
                     <span>🚀</span> 공유하기
