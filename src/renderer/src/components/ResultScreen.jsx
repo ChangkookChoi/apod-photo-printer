@@ -2,18 +2,16 @@ import React, { useEffect, useState, useRef } from 'react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { toPng, toBlob } from 'html-to-image';
 import { isElectron } from '../utils/env';
-
-// ★ [추가] 출력물 및 캡처용 다크 로고 불러오기
-import logoDark from '../assets/logo_dark.png'; 
+import logoDark from '../assets/logo_dark.png'; // ★ 확장자 png 수정 확인!
 
 const ResultScreen = ({ data, onHome }) => {
   const [isPrinting, setIsPrinting] = useState(false);
   const [paperSize, setPaperSize] = useState('auto');
+  // 폴라로이드 디자인은 기본적으로 세로(portrait) 형태에 최적화되어 있습니다.
   const [orientation, setOrientation] = useState('portrait');
   const [isMobile, setIsMobile] = useState(false);
   const [isCapturing, setIsCapturing] = useState(true); 
   
-  // img 태그 대신 사용할 캔버스 참조
   const imageCanvasRef = useRef(null);
   const [imgLoaded, setImgLoaded] = useState(false);
 
@@ -46,7 +44,6 @@ const ResultScreen = ({ data, onHome }) => {
     };
   }, [onHome]);
 
-  // 이미지를 캔버스에 직접 그리는 로직 (보안 에러 방지용)
   useEffect(() => {
     if (!data) return;
     if (data.media_type !== 'image') {
@@ -190,61 +187,64 @@ const ResultScreen = ({ data, onHome }) => {
           body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: white; -webkit-print-color-adjust: exact; }
           #print-area {
             width: 100%; height: 100%; display: flex !important; 
-            flex-direction: ${isLandscape ? 'row' : 'column'} !important; 
             justify-content: center; align-items: center; padding: 4mm;
             ${paperSize.includes('A4') && !isElectron() ? `position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90%;` : ''}
           }
         }
       `}</style>
 
-      {/* 캡처 & 출력의 핵심 타겟 영역 (#print-area) */}
-      <div id="print-area" className={`my-auto w-full flex items-center print:text-black bg-gray-900 print:bg-white p-4 rounded-xl
-            ${isLandscape ? 'max-w-5xl flex-col md:flex-row gap-4 md:gap-8' : 'max-w-4xl flex-col gap-4'}`}>
+      {/* ★ [폴라로이드 레이아웃 시작] */}
+      <div id="print-area" className="my-auto w-full max-w-sm md:max-w-md bg-white p-4 md:p-5 pb-8 md:pb-12 shadow-2xl print:shadow-none mx-auto flex flex-col relative border border-gray-200 print:border-0 print:rounded-none">
         
-        {/* 이미지 영역 */}
-        <div className={`relative flex items-center justify-center bg-black rounded-3xl overflow-hidden shadow-2xl border border-gray-700 
-                        print:border-0 print:rounded-none print:shadow-none print:bg-white
-                        ${isLandscape ? 'w-full md:w-[65%] mb-0' : 'w-full mb-2 print:mb-4'}`}>
+        {/* 1. 이미지 영역 (1:1 정사각형 꽉 채우기) */}
+        <div className="w-full aspect-square bg-gray-100 overflow-hidden relative mb-4 md:mb-5 shadow-inner">
           {data.media_type === 'image' ? (
             <canvas 
               ref={imageCanvasRef}
-              className={`max-w-full object-contain print:object-contain transition-opacity duration-500
-              ${isLandscape ? 'max-h-[50vh] md:max-h-[80vh] print:max-h-[90vh]' : 'max-h-[50vh] md:max-h-[60vh] print:max-h-[65vh]'}
+              // 핵심: object-cover로 어떤 비율의 사진이든 정사각형 프레임에 꽉 차게 만듭니다.
+              className={`w-full h-full object-cover transition-opacity duration-500
               ${imgLoaded ? 'opacity-100' : 'opacity-0'}`} 
             />
           ) : (
-            <div className="text-center p-10 flex flex-col items-center justify-center h-full print:text-black min-h-[300px]">
+            <div className="text-center p-10 flex flex-col items-center justify-center h-full text-black">
               <p className="text-4xl mb-4">🎥</p>
-              <p className="text-xl">동영상 콘텐츠입니다.</p>
+              <p className="text-lg font-bold">동영상 콘텐츠입니다.</p>
             </div>
           )}
         </div>
 
-        {/* 텍스트 및 QR/로고 영역 */}
-        <div className={`relative flex items-center 
-            ${isLandscape ? 'w-full md:w-[35%] flex-col text-center space-y-4 md:space-y-6' : 'w-full justify-center mb-4 print:mb-0 print:px-4'}`}>
-          <div className={`z-10 ${isLandscape ? 'px-0' : 'text-center px-4 md:px-20 print:px-4'}`}> 
-            <h2 className={`${isLandscape ? 'text-2xl md:text-4xl print:text-2xl' : 'text-2xl md:text-3xl print:text-xl'} font-bold mb-2 break-keep`}>{data.title}</h2>
-            <p className="text-gray-400 mb-2 print:text-gray-600 text-sm md:text-base">{data.date}</p>
-            <div className="flex flex-col items-center text-xs text-gray-500 space-y-1 print:text-gray-500">
-              {data.copyright && <p>Image Credit: {data.copyright}</p>}
-              <p>Source: apod.nasa.gov</p>
+        {/* 2. 하단 정보 영역 (넓은 흰색 여백) */}
+        <div className="flex justify-between items-end px-1">
+          
+          {/* 텍스트 영역 (좌측) */}
+          <div className="flex flex-col max-w-[70%]"> 
+            <h2 className="text-xl md:text-2xl font-bold text-black break-keep leading-tight mb-1">
+              {data.title}
+            </h2>
+            <p className="text-gray-600 text-sm md:text-base font-medium mb-2">
+              {data.date}
+            </p>
+            <div className="text-[9px] md:text-[10px] text-gray-400 leading-snug">
+              {data.copyright && <p>ⓒ {data.copyright}</p>}
+              <p>Powered by NASA</p>
             </div>
           </div>
 
-          {/* ★ QR코드와 로고가 합쳐진 브랜딩 박스 */}
-          <div className={`${isLandscape ? 'mt-2 md:mt-4' : 'absolute right-0'} flex flex-col items-center bg-white p-2 md:p-3 rounded-xl print:p-0 print:static`}>
-            <QRCodeCanvas value={data.hdurl || data.url} size={isLandscape ? (isMobile ? 60 : 100) : 60} bgColor={"#ffffff"} fgColor={"#000000"} level={"M"} />
-            <span className="text-black text-[8px] font-bold mt-1 mb-2">SCAN ME</span>
-            <img src={logoDark} alt="With Light" className="h-4 md:h-5 object-contain mix-blend-multiply" />
+          {/* QR & 로고 영역 (우측) */}
+          <div className="flex flex-col items-center">
+            <QRCodeCanvas value={data.hdurl || data.url} size={54} bgColor={"#ffffff"} fgColor={"#000000"} level={"M"} />
+            <span className="text-black text-[7px] font-bold mt-1 mb-1 tracking-widest">SCAN ME</span>
+            <img src={logoDark} alt="With Light" className="h-3 md:h-4 mt-1 object-contain mix-blend-multiply" />
           </div>
+
         </div>
       </div>
+      {/* ★ [폴라로이드 레이아웃 끝] */}
 
       {/* 하단 버튼 영역 */}
       <div className="flex flex-wrap justify-center gap-3 md:gap-4 mt-6 mb-8 print:hidden z-50">
         {isPrinting || isCapturing ? (
-          <div className="px-6 py-3 bg-blue-600 rounded-xl font-bold text-white animate-pulse text-sm md:text-base flex items-center">
+          <div className="px-6 py-3 bg-blue-600 rounded-xl font-bold text-white animate-pulse text-sm md:text-base flex items-center shadow-lg">
             <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -253,7 +253,7 @@ const ResultScreen = ({ data, onHome }) => {
           </div>
         ) : (
           <>
-            <button onClick={onHome} className="px-4 md:px-6 py-3 bg-gray-700 rounded-xl hover:bg-gray-600 transition text-sm md:text-base">
+            <button onClick={onHome} className="px-4 md:px-6 py-3 bg-gray-700 rounded-xl hover:bg-gray-600 transition text-sm md:text-base shadow-lg">
               처음으로
             </button>
             
