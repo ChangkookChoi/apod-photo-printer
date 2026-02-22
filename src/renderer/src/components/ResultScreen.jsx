@@ -100,14 +100,17 @@ const ResultScreen = ({ data, onHome }) => {
     }
   };
 
-  // ★ [수정] 캡처 시 카드 외부 배경이 보이지 않도록 옵션 최적화
+  // ★ [수정] 캡처 옵션: 상하 대칭 여백(padding) 및 iOS 렌더링 최적화
   const getCaptureOptions = () => ({
-    backgroundColor: '#f9f9f7', // 카드 배경색과 동일하게 설정하여 경계선 문제 방지
+    backgroundColor: '#111827', // 카드 밖 배경을 앱 전체 테마와 통일
     pixelRatio: 2,
     skipFonts: true,
     style: {
       margin: '0',
-      padding: '0', // 쏠림 및 배경 노출 방지를 위해 패딩 제거
+      padding: '60px 40px', // 상하 60px, 좌우 40px로 대칭 여백 부여
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
     }
   });
 
@@ -120,24 +123,21 @@ const ResultScreen = ({ data, onHome }) => {
   const handleDownloadImage = async () => {
     if (isCapturing) return;
     setIsCapturing(true);
-    await new Promise(resolve => setTimeout(resolve, 300));
+    // iOS Safari의 렌더링 동기화를 위해 대기 시간 연장
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     try {
-      const printArea = document.getElementById('print-area');
+      const printArea = document.getElementById('print-area-wrapper');
       if (!printArea) throw new Error("캡처 영역 누락");
 
       if (isMobile && navigator.share) {
         const blob = await toBlob(printArea, getCaptureOptions());
         const file = new File([blob], `APOD_Photocard_${data.date}.png`, { type: 'image/png' });
         
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            files: [file],
-            title: '포토카드 저장',
-          });
-        } else {
-          throw new Error("파일 공유 미지원");
-        }
+        await navigator.share({
+          files: [file],
+          title: '포토카드 저장',
+        });
       } else {
         const dataUrl = await toPng(printArea, getCaptureOptions());
         const link = document.createElement('a');
@@ -147,16 +147,7 @@ const ResultScreen = ({ data, onHome }) => {
       }
     } catch (error) {
       console.error('이미지 저장 에러:', error);
-      try {
-        const printArea = document.getElementById('print-area');
-        const dataUrl = await toPng(printArea, getCaptureOptions());
-        const link = document.createElement('a');
-        link.download = `APOD_Photocard_${data.date}.png`;
-        link.href = dataUrl;
-        link.click();
-      } catch (e) {
-        alert(`[저장 실패]\n${getErrorMessage(error)}`);
-      }
+      alert(`[저장 실패]\n${getErrorMessage(error)}`);
     } finally {
       setIsCapturing(false);
     }
@@ -166,28 +157,24 @@ const ResultScreen = ({ data, onHome }) => {
     if (isCapturing) return;
     
     if (!navigator.canShare) {
-      alert('현재 브라우저에서는 공유 기능을 지원하지 않습니다.\n(웹사이트 링크만 복사됩니다.)');
-      try { await navigator.share({ title: '우주에서 온 내 생일 사진', url: window.location.href }); } catch(e) {}
+      alert('현재 브라우저에서는 공유 기능을 지원하지 않습니다.');
       return;
     }
 
     setIsCapturing(true);
-    await new Promise(resolve => setTimeout(resolve, 300));
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     try {
-      const printArea = document.getElementById('print-area');
+      const printArea = document.getElementById('print-area-wrapper');
       if (!printArea) throw new Error("캡처 영역 누락");
 
       const blob = await toBlob(printArea, getCaptureOptions());
-      if (!blob) throw new Error("이미지 파일(Blob) 생성 실패");
-      
       const file = new File([blob], `APOD_Photocard_${data.date}.png`, { type: 'image/png' });
 
       await navigator.share({ files: [file] });
     } catch (error) {
       console.error('공유 에러:', error);
       alert(`[공유 실패]\n${getErrorMessage(error)}`);
-      try { await navigator.share({ title: '우주에서 온 내 생일 사진', url: window.location.href }); } catch (e) {}
     } finally {
       setIsCapturing(false);
     }
@@ -203,17 +190,16 @@ const ResultScreen = ({ data, onHome }) => {
         @media print {
           @page { size: ${paperSize} ${isLandscape ? 'landscape' : 'portrait'}; margin: 0mm; }
           body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: white; -webkit-print-color-adjust: exact; }
-          #print-area {
+          #print-area-wrapper {
             width: 100%; height: 100%; display: flex !important; 
             justify-content: center; align-items: center; padding: 4mm;
           }
         }
       `}</style>
 
-      {/* ★ [수정] id="print-area"를 실제 카드 div에 직접 부여하여 캡처 범위를 고정 */}
-      <div className="my-auto w-fit flex flex-col items-center justify-center relative bg-transparent mx-auto">
+      {/* ★ [수정] 캡처 시 상하 여백을 위해 래퍼(Wrapper) 추가 */}
+      <div id="print-area-wrapper" className="my-auto flex flex-col items-center justify-center bg-transparent mx-auto">
         <div 
-          id="print-area" 
           className="bg-[#f9f9f7] shadow-[0_20px_50px_rgba(0,0,0,0.5)] print:shadow-none border border-white/20 print:border-0
                         w-[85vw] sm:w-[65vw] md:w-[50vw] lg:w-[35vw] xl:w-[28vw]
                         p-4 md:p-6 pb-12 md:pb-20 flex flex-col items-center"
@@ -228,7 +214,7 @@ const ResultScreen = ({ data, onHome }) => {
               />
             ) : (
               <div className="text-center p-10 flex flex-col items-center justify-center h-full text-black">
-                <p className="text-5xl mb-4">🎥</p>
+                <p className="text-5xl mb-4 text-white">🎥</p>
                 <p className="text-xl font-bold text-white">Video Content</p>
               </div>
             )}
@@ -245,7 +231,7 @@ const ResultScreen = ({ data, onHome }) => {
               </p>
               <div className="text-[10px] md:text-xs lg:text-sm text-gray-400 font-medium leading-snug uppercase tracking-widest">
                 {data.copyright && <p className="truncate text-left">ⓒ {data.copyright}</p>}
-                {/* ★ [문구 수정] 기존 요청하신 문구 유지 */}
+                {/* ★ 문구 유지: Powered by NASA APOD */}
                 <p className="text-left">Powered by NASA APOD</p>
               </div>
             </div>
