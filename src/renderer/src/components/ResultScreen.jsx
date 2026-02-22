@@ -100,17 +100,16 @@ const ResultScreen = ({ data, onHome }) => {
     }
   };
 
-  // ★ 공유 이미지 쏠림 방지를 위한 캡처 전용 옵션
   const getCaptureOptions = () => ({
-    backgroundColor: '#111827', // 캡처 시 배경을 어두운 톤으로 채워 카드가 돋보이게 함
-    pixelRatio: isMobile ? 2 : 2, // 고화질 유지
+    backgroundColor: '#111827',
+    pixelRatio: 2,
     skipFonts: true,
     style: {
       display: 'flex',
       justifyContent: 'center',
       alignItems: 'center',
       margin: '0',
-      padding: '40px', // 카드 주변에 여백을 주어 쏠림 방지
+      padding: '40px',
       width: 'auto',
       height: 'auto'
     }
@@ -122,6 +121,7 @@ const ResultScreen = ({ data, onHome }) => {
     return JSON.stringify(error) || "알 수 없는 에러";
   };
 
+  // ★ [수정] 모바일 갤러리 저장을 위한 핸들러
   const handleDownloadImage = async () => {
     if (isCapturing) return;
     setIsCapturing(true);
@@ -131,15 +131,40 @@ const ResultScreen = ({ data, onHome }) => {
       const printArea = document.getElementById('print-area');
       if (!printArea) throw new Error("캡처 영역 누락");
 
-      const dataUrl = await toPng(printArea, getCaptureOptions());
-      
-      const link = document.createElement('a');
-      link.download = `APOD_Photocard_${data.date}.png`;
-      link.href = dataUrl;
-      link.click();
+      // 모바일인 경우 navigator.share를 활용해 '이미지 저장' 유도
+      if (isMobile && navigator.share) {
+        const blob = await toBlob(printArea, getCaptureOptions());
+        const file = new File([blob], `APOD_Photocard_${data.date}.png`, { type: 'image/png' });
+        
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: '포토카드 저장',
+          });
+        } else {
+          throw new Error("파일 공유 미지원");
+        }
+      } else {
+        // PC 환경에서는 기존 방식대로 파일 다운로드
+        const dataUrl = await toPng(printArea, getCaptureOptions());
+        const link = document.createElement('a');
+        link.download = `APOD_Photocard_${data.date}.png`;
+        link.href = dataUrl;
+        link.click();
+      }
     } catch (error) {
       console.error('이미지 저장 에러:', error);
-      alert(`[저장 실패]\n${getErrorMessage(error)}`);
+      // 공유 API 실패 시 일반 다운로드 시도
+      try {
+        const printArea = document.getElementById('print-area');
+        const dataUrl = await toPng(printArea, getCaptureOptions());
+        const link = document.createElement('a');
+        link.download = `APOD_Photocard_${data.date}.png`;
+        link.href = dataUrl;
+        link.click();
+      } catch (e) {
+        alert(`[저장 실패]\n${getErrorMessage(error)}`);
+      }
     } finally {
       setIsCapturing(false);
     }
@@ -166,11 +191,7 @@ const ResultScreen = ({ data, onHome }) => {
       
       const file = new File([blob], `APOD_Photocard_${data.date}.png`, { type: 'image/png' });
 
-      if (navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file] });
-      } else {
-        throw new Error("브라우저가 파일 직접 공유를 허용하지 않습니다.");
-      }
+      await navigator.share({ files: [file] });
     } catch (error) {
       console.error('공유 에러:', error);
       alert(`[공유 실패]\n${getErrorMessage(error)}`);
@@ -197,17 +218,14 @@ const ResultScreen = ({ data, onHome }) => {
         }
       `}</style>
 
-      {/* ★ 폴라로이드 카드 컨테이너 (쏠림 방지를 위해 정렬 속성 강화) */}
       <div 
         id="print-area" 
         className="my-auto w-fit flex flex-col items-center justify-center relative bg-transparent print:bg-white mx-auto"
       >
-        {/* 실제 카드 몸체: bg-[#f9f9f7]로 아이보리 톤 적용 */}
         <div className="bg-[#f9f9f7] shadow-[0_20px_50px_rgba(0,0,0,0.5)] print:shadow-none border border-white/20 print:border-0
                         w-[85vw] sm:w-[65vw] md:w-[50vw] lg:w-[35vw] xl:w-[28vw]
                         p-4 md:p-6 pb-12 md:pb-20 flex flex-col items-center">
           
-          {/* 1. 이미지 영역 (1:1 비율) */}
           <div className="w-full aspect-square bg-black overflow-hidden relative mb-6 md:mb-10 shadow-[inset_0_2px_10px_rgba(0,0,0,0.8)]">
             {data.media_type === 'image' ? (
               <canvas 
@@ -223,7 +241,6 @@ const ResultScreen = ({ data, onHome }) => {
             )}
           </div>
 
-          {/* 2. 하단 정보 영역 */}
           <div className="w-full flex justify-between items-end px-1 gap-6">
             <div className="flex flex-col flex-1 min-w-0"> 
               <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-gray-900 break-keep leading-tight mb-2 tracking-tighter">
@@ -234,7 +251,7 @@ const ResultScreen = ({ data, onHome }) => {
               </p>
               <div className="text-[10px] md:text-xs lg:text-sm text-gray-400 font-medium leading-snug uppercase tracking-widest">
                 {data.copyright && <p className="truncate">ⓒ {data.copyright}</p>}
-                <p>Powered by NASA APOD</p>
+                <p>NASA ASTRONOMY PICTURE</p>
               </div>
             </div>
 
@@ -242,7 +259,7 @@ const ResultScreen = ({ data, onHome }) => {
               <QRCodeCanvas 
                 value={data.hdurl || data.url} 
                 size={isMobile ? 64 : 100} 
-                bgColor={"#f9f9f7"} // QR 배경도 카드 색상에 맞춤
+                bgColor={"#f9f9f7"} 
                 fgColor={"#111827"} 
                 level={"M"} 
               />
@@ -253,7 +270,6 @@ const ResultScreen = ({ data, onHome }) => {
         </div>
       </div>
 
-      {/* 버튼 영역 */}
       <div className="flex flex-wrap justify-center gap-3 md:gap-4 mt-8 mb-8 print:hidden z-50">
         {isPrinting || isCapturing ? (
           <div className="px-6 py-3 bg-blue-600 rounded-xl font-bold text-white animate-pulse text-sm md:text-base flex items-center shadow-lg">
