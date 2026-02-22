@@ -39,3 +39,6 @@ Account Email: changkook94@gmail.com
 Account ID: 324439dc-ec73-42a9-a46e-8fb6ab43a95f
 
 APOD 기반 포토카드 출력 서비스
+
+exe 빌드 명렁어
+npm run build && npx electron-builder --win --x64
