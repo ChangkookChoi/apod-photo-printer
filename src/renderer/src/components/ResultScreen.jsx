@@ -2,12 +2,11 @@ import React, { useEffect, useState, useRef } from 'react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { toPng, toBlob } from 'html-to-image';
 import { isElectron } from '../utils/env';
-import logoDark from '../assets/logo_dark.png'; // ★ 확장자 png 수정 확인!
+import logoDark from '../assets/logo_dark.png';
 
 const ResultScreen = ({ data, onHome }) => {
   const [isPrinting, setIsPrinting] = useState(false);
   const [paperSize, setPaperSize] = useState('auto');
-  // 폴라로이드 디자인은 기본적으로 세로(portrait) 형태에 최적화되어 있습니다.
   const [orientation, setOrientation] = useState('portrait');
   const [isMobile, setIsMobile] = useState(false);
   const [isCapturing, setIsCapturing] = useState(true); 
@@ -104,7 +103,7 @@ const ResultScreen = ({ data, onHome }) => {
   const getCaptureOptions = () => ({
     backgroundColor: '#ffffff',
     pixelRatio: isMobile ? 1 : 2,
-    style: { margin: '0', padding: '4mm' },
+    style: { margin: '0', padding: '0' },
     filter: (node) => {
       if (node?.tagName === 'LINK' || node?.tagName === 'STYLE') return false;
       return true;
@@ -134,7 +133,7 @@ const ResultScreen = ({ data, onHome }) => {
       link.click();
     } catch (error) {
       console.error('이미지 저장 에러:', error);
-      alert(`[저장 실패]\n${getErrorMessage(error)}\n\n이 메시지를 캡처해서 알려주세요!`);
+      alert(`[저장 실패]\n${getErrorMessage(error)}`);
     } finally {
       setIsCapturing(false);
     }
@@ -168,7 +167,7 @@ const ResultScreen = ({ data, onHome }) => {
       }
     } catch (error) {
       console.error('공유 에러:', error);
-      alert(`[공유 실패]\n${getErrorMessage(error)}\n\n(대신 링크 공유를 시도합니다)`);
+      alert(`[공유 실패]\n${getErrorMessage(error)}`);
       try { await navigator.share({ title: '우주에서 온 내 생일 사진', url: window.location.href }); } catch (e) {}
     } finally {
       setIsCapturing(false);
@@ -193,56 +192,67 @@ const ResultScreen = ({ data, onHome }) => {
         }
       `}</style>
 
-      {/* ★ [폴라로이드 레이아웃 시작] */}
-      <div id="print-area" className="my-auto w-full max-w-sm md:max-w-md bg-white p-4 md:p-5 pb-8 md:pb-12 shadow-2xl print:shadow-none mx-auto flex flex-col relative border border-gray-200 print:border-0 print:rounded-none">
+      {/* 반응형 폴라로이드 레이아웃
+         max-width를 뷰포트 너비(vw) 기준으로 설정하여 화면이 커질수록 카드도 함께 커집니다.
+      */}
+      <div 
+        id="print-area" 
+        className="my-auto w-full flex flex-col relative bg-white shadow-2xl print:shadow-none mx-auto border border-gray-200 print:border-0 
+                   max-w-[90vw] sm:max-w-[75vw] md:max-w-[60vw] lg:max-w-[45vw] xl:max-w-[35vw]
+                   h-fit p-4 md:p-6 pb-12 md:pb-20"
+      >
         
-        {/* 1. 이미지 영역 (1:1 정사각형 꽉 채우기) */}
-        <div className="w-full aspect-square bg-gray-100 overflow-hidden relative mb-4 md:mb-5 shadow-inner">
+        {/* 1. 이미지 영역 (1:1 비율 유지) */}
+        <div className="w-full aspect-square bg-gray-100 overflow-hidden relative mb-6 md:mb-10 shadow-inner">
           {data.media_type === 'image' ? (
             <canvas 
               ref={imageCanvasRef}
-              // 핵심: object-cover로 어떤 비율의 사진이든 정사각형 프레임에 꽉 차게 만듭니다.
               className={`w-full h-full object-cover transition-opacity duration-500
               ${imgLoaded ? 'opacity-100' : 'opacity-0'}`} 
             />
           ) : (
             <div className="text-center p-10 flex flex-col items-center justify-center h-full text-black">
-              <p className="text-4xl mb-4">🎥</p>
-              <p className="text-lg font-bold">동영상 콘텐츠입니다.</p>
+              <p className="text-5xl mb-4">🎥</p>
+              <p className="text-xl font-bold">동영상 콘텐츠입니다.</p>
             </div>
           )}
         </div>
 
-        {/* 2. 하단 정보 영역 (넓은 흰색 여백) */}
-        <div className="flex justify-between items-end px-1">
+        {/* 2. 하단 정보 영역 */}
+        <div className="flex justify-between items-end px-1 gap-6">
           
           {/* 텍스트 영역 (좌측) */}
-          <div className="flex flex-col max-w-[70%]"> 
-            <h2 className="text-xl md:text-2xl font-bold text-black break-keep leading-tight mb-1">
+          <div className="flex flex-col flex-1 min-w-0"> 
+            <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-black break-keep leading-tight mb-2">
               {data.title}
             </h2>
-            <p className="text-gray-600 text-sm md:text-base font-medium mb-2">
+            <p className="text-gray-600 text-base md:text-lg lg:text-xl font-medium mb-4">
               {data.date}
             </p>
-            <div className="text-[9px] md:text-[10px] text-gray-400 leading-snug">
-              {data.copyright && <p>ⓒ {data.copyright}</p>}
-              <p>Powered by NASA</p>
+            <div className="text-[10px] md:text-xs lg:text-sm text-gray-400 leading-snug">
+              {data.copyright && <p className="truncate">ⓒ {data.copyright}</p>}
+              <p>Powered by NASA APOD</p>
             </div>
           </div>
 
           {/* QR & 로고 영역 (우측) */}
-          <div className="flex flex-col items-center">
-            <QRCodeCanvas value={data.hdurl || data.url} size={54} bgColor={"#ffffff"} fgColor={"#000000"} level={"M"} />
-            <span className="text-black text-[7px] font-bold mt-1 mb-1 tracking-widest">SCAN ME</span>
-            <img src={logoDark} alt="With Light" className="h-3 md:h-4 mt-1 object-contain mix-blend-multiply" />
+          <div className="flex flex-col items-center flex-shrink-0">
+            <QRCodeCanvas 
+              value={data.hdurl || data.url} 
+              size={isMobile ? 64 : 100} 
+              bgColor={"#ffffff"} 
+              fgColor={"#000000"} 
+              level={"M"} 
+            />
+            <span className="text-black text-[10px] md:text-xs font-bold mt-2 mb-2 tracking-widest uppercase">Scan Me</span>
+            <img src={logoDark} alt="With Light" className="h-5 md:h-7 mt-1 object-contain mix-blend-multiply" />
           </div>
 
         </div>
       </div>
-      {/* ★ [폴라로이드 레이아웃 끝] */}
 
       {/* 하단 버튼 영역 */}
-      <div className="flex flex-wrap justify-center gap-3 md:gap-4 mt-6 mb-8 print:hidden z-50">
+      <div className="flex flex-wrap justify-center gap-3 md:gap-4 mt-8 mb-8 print:hidden z-50">
         {isPrinting || isCapturing ? (
           <div className="px-6 py-3 bg-blue-600 rounded-xl font-bold text-white animate-pulse text-sm md:text-base flex items-center shadow-lg">
             <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
