@@ -3,6 +3,9 @@ import { QRCodeCanvas } from 'qrcode.react';
 import { toPng, toBlob } from 'html-to-image';
 import { isElectron } from '../utils/env';
 
+// ★ [추가] 출력물 및 캡처용 다크 로고 불러오기
+import logoDark from '../assets/logo_dark.jpg'; 
+
 const ResultScreen = ({ data, onHome }) => {
   const [isPrinting, setIsPrinting] = useState(false);
   const [paperSize, setPaperSize] = useState('auto');
@@ -10,7 +13,7 @@ const ResultScreen = ({ data, onHome }) => {
   const [isMobile, setIsMobile] = useState(false);
   const [isCapturing, setIsCapturing] = useState(true); 
   
-  // ★ [핵심 추가] img 태그 대신 사용할 캔버스 참조
+  // img 태그 대신 사용할 캔버스 참조
   const imageCanvasRef = useRef(null);
   const [imgLoaded, setImgLoaded] = useState(false);
 
@@ -43,7 +46,7 @@ const ResultScreen = ({ data, onHome }) => {
     };
   }, [onHome]);
 
-  // ★ [핵심 변경] 이미지를 가져와서 <img>가 아닌 <canvas>에 직접 물감처럼 그려버립니다.
+  // 이미지를 캔버스에 직접 그리는 로직 (보안 에러 방지용)
   useEffect(() => {
     if (!data) return;
     if (data.media_type !== 'image') {
@@ -52,22 +55,20 @@ const ResultScreen = ({ data, onHome }) => {
     }
     
     const rawUrl = data.url || data.hdurl;
-    // 고화질 + CORS가 완벽하게 뚫려있는 wsrv.nl 프록시 사용
     const proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(rawUrl)}&w=1200&q=90&output=jpg`;
 
     setIsCapturing(true); 
 
     const img = new Image();
-    img.crossOrigin = 'anonymous'; // 프록시 서버에 CORS 권한 요청
+    img.crossOrigin = 'anonymous'; 
     
-    // 이미지가 성공적으로 다운로드되면 캔버스에 픽셀을 복사합니다.
     img.onload = () => {
       const canvas = imageCanvasRef.current;
       if (canvas) {
         canvas.width = img.width;
         canvas.height = img.height;
         const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0); // 캔버스에 그림 그리기 완료!
+        ctx.drawImage(img, 0, 0); 
         setImgLoaded(true);
         setIsCapturing(false);
       }
@@ -78,7 +79,7 @@ const ResultScreen = ({ data, onHome }) => {
       setIsCapturing(false);
     };
     
-    img.src = proxyUrl; // 다운로드 시작
+    img.src = proxyUrl; 
   }, [data]);
 
   if (!data) return <div>데이터 로딩 실패</div>;
@@ -103,12 +104,10 @@ const ResultScreen = ({ data, onHome }) => {
     }
   };
 
-  // ★ 모바일 캡처 시 방해되는 외부 폰트/스타일 로딩을 싹 다 차단하는 강력한 옵션
   const getCaptureOptions = () => ({
     backgroundColor: '#ffffff',
     pixelRatio: isMobile ? 1 : 2,
     style: { margin: '0', padding: '4mm' },
-    // LINK(외부 폰트/CSS)를 캡처 도화지에 복사하지 않게 막아서 Event 에러를 원천 봉쇄합니다.
     filter: (node) => {
       if (node?.tagName === 'LINK' || node?.tagName === 'STYLE') return false;
       return true;
@@ -198,15 +197,15 @@ const ResultScreen = ({ data, onHome }) => {
         }
       `}</style>
 
+      {/* 캡처 & 출력의 핵심 타겟 영역 (#print-area) */}
       <div id="print-area" className={`my-auto w-full flex items-center print:text-black bg-gray-900 print:bg-white p-4 rounded-xl
             ${isLandscape ? 'max-w-5xl flex-col md:flex-row gap-4 md:gap-8' : 'max-w-4xl flex-col gap-4'}`}>
         
+        {/* 이미지 영역 */}
         <div className={`relative flex items-center justify-center bg-black rounded-3xl overflow-hidden shadow-2xl border border-gray-700 
                         print:border-0 print:rounded-none print:shadow-none print:bg-white
                         ${isLandscape ? 'w-full md:w-[65%] mb-0' : 'w-full mb-2 print:mb-4'}`}>
           {data.media_type === 'image' ? (
-             // ★ [최종 병기] <img> 태그를 완전히 삭제하고, 자바스크립트로 직접 그려낸 <canvas>를 배치합니다.
-             // 캔버스도 object-contain이 완벽하게 적용되어 이미지처럼 똑같이 보입니다!
             <canvas 
               ref={imageCanvasRef}
               className={`max-w-full object-contain print:object-contain transition-opacity duration-500
@@ -221,6 +220,7 @@ const ResultScreen = ({ data, onHome }) => {
           )}
         </div>
 
+        {/* 텍스트 및 QR/로고 영역 */}
         <div className={`relative flex items-center 
             ${isLandscape ? 'w-full md:w-[35%] flex-col text-center space-y-4 md:space-y-6' : 'w-full justify-center mb-4 print:mb-0 print:px-4'}`}>
           <div className={`z-10 ${isLandscape ? 'px-0' : 'text-center px-4 md:px-20 print:px-4'}`}> 
@@ -232,13 +232,16 @@ const ResultScreen = ({ data, onHome }) => {
             </div>
           </div>
 
-          <div className={`${isLandscape ? 'mt-2 md:mt-4' : 'absolute right-0'} flex flex-col items-center bg-white p-1.5 md:p-2 rounded-lg print:p-0 print:static`}>
+          {/* ★ QR코드와 로고가 합쳐진 브랜딩 박스 */}
+          <div className={`${isLandscape ? 'mt-2 md:mt-4' : 'absolute right-0'} flex flex-col items-center bg-white p-2 md:p-3 rounded-xl print:p-0 print:static`}>
             <QRCodeCanvas value={data.hdurl || data.url} size={isLandscape ? (isMobile ? 60 : 100) : 60} bgColor={"#ffffff"} fgColor={"#000000"} level={"M"} />
-            <span className="text-black text-[8px] font-bold mt-1">SCAN ME</span>
+            <span className="text-black text-[8px] font-bold mt-1 mb-2">SCAN ME</span>
+            <img src={logoDark} alt="With Light" className="h-4 md:h-5 object-contain mix-blend-multiply" />
           </div>
         </div>
       </div>
 
+      {/* 하단 버튼 영역 */}
       <div className="flex flex-wrap justify-center gap-3 md:gap-4 mt-6 mb-8 print:hidden z-50">
         {isPrinting || isCapturing ? (
           <div className="px-6 py-3 bg-blue-600 rounded-xl font-bold text-white animate-pulse text-sm md:text-base flex items-center">
