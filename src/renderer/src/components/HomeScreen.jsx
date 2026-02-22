@@ -31,12 +31,6 @@ const HomeScreen = ({ onStart, onAdminClick }) => {
         </div>
       </div>
 
-      {/* ★ [수정] 우측 하단: 기존 텍스트 대신 화이트 로고 배치 */}
-      <div className="absolute bottom-8 right-8 z-20 flex flex-col items-end opacity-80">
-        <img src={logoWhite} alt="With Light Logo" className="h-10 mb-2 object-contain mix-blend-screen" />
-        <span className="text-white/50 text-xs">Powered by NASA APOD</span>
-      </div>
-
       {isElectron() && (
         <button 
           onClick={handleExit}
