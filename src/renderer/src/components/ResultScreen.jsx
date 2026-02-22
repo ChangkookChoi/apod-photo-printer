@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-// ★ [핵심 1] 캔버스 대신 절대 증발하지 않는 SVG 형식의 QR코드 사용
 import { QRCodeSVG } from 'qrcode.react'; 
 import { toPng, toBlob } from 'html-to-image';
 import { isElectron } from '../utils/env';
@@ -12,6 +11,10 @@ const ResultScreen = ({ data, onHome }) => {
   const [isMobile, setIsMobile] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false); 
 
+  // ★ 캡처 보안 에러를 피하기 위한 Base64 이미지 데이터 상태
+  const [nasaImageSrc, setNasaImageSrc] = useState(null);
+  const [logoImageSrc, setLogoImageSrc] = useState(null);
+
   useEffect(() => {
     const savedPaperSize = localStorage.getItem('target_paper_size');
     setPaperSize(savedPaperSize || (isElectron() ? 'auto' : 'A4'));
@@ -22,11 +25,41 @@ const ResultScreen = ({ data, onHome }) => {
     return () => clearTimeout(timer);
   }, [onHome]);
 
-  if (!data) return <div className="bg-gray-900 min-h-screen flex items-center justify-center text-white">데이터 로딩 실패</div>;
+  // ★ 백그라운드에서 이미지를 Base64로 안전하게 변환 (화면 백화 현상 없음)
+  useEffect(() => {
+    if (!data) return;
 
-  const proxyUrl = data.media_type === 'image' 
-    ? `https://wsrv.nl/?url=${encodeURIComponent(data.url || data.hdurl)}&w=1200&q=90&output=jpg` 
-    : '';
+    if (data.media_type === 'image') {
+      const proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(data.url || data.hdurl)}&w=1200&q=90&output=jpg`;
+      fetch(proxyUrl)
+        .then(res => res.blob())
+        .then(blob => {
+          const reader = new FileReader();
+          reader.onloadend = () => setNasaImageSrc(reader.result);
+          reader.readAsDataURL(blob);
+        })
+        .catch(err => {
+          console.error("NASA 이미지 변환 실패:", err);
+          setNasaImageSrc(proxyUrl); // 실패 시 원본 링크 사용 (Fallback)
+        });
+    } else {
+      setNasaImageSrc('video');
+    }
+
+    fetch(logoDark)
+      .then(res => res.blob())
+      .then(blob => {
+        const reader = new FileReader();
+        reader.onloadend = () => setLogoImageSrc(reader.result);
+        reader.readAsDataURL(blob);
+      })
+      .catch(err => {
+        console.error("로고 변환 실패:", err);
+        setLogoImageSrc(logoDark);
+      });
+  }, [data]);
+
+  if (!data) return <div className="bg-gray-900 min-h-screen flex items-center justify-center text-white">데이터 로딩 실패</div>;
 
   const handlePrint = async () => {
     setIsPrinting(true); 
@@ -50,12 +83,24 @@ const ResultScreen = ({ data, onHome }) => {
     skipFonts: true,
     style: {
       margin: '0',
-      padding: '60px 40px', // ★ 상하 60px로 위아래 대칭 여백 완벽 유지
+      padding: '60px 40px', // 상하 60px 완벽 대칭
       display: 'flex',
       justifyContent: 'center',
       alignItems: 'center'
     }
   });
+
+  // ★ [추가] 상세 에러 분석 함수 (어떤 이미지에서 막혔는지 추적)
+  const getDetailedError = (error) => {
+    if (error instanceof Event) {
+      let targetInfo = "알 수 없는 요소";
+      if (error.target) {
+        targetInfo = `<${error.target.tagName?.toLowerCase()}> (src: ${error.target.src || '없음'})`;
+      }
+      return `[보안 차단 이벤트]\n종류: ${error.type}\n발생 위치: ${targetInfo}`;
+    }
+    return error.message || JSON.stringify(error) || "알 수 없는 오류 발생";
+  };
 
   const handleCapture = async (type) => {
     if (isCapturing) return;
@@ -65,21 +110,21 @@ const ResultScreen = ({ data, onHome }) => {
       const printArea = document.getElementById('print-area-wrapper');
       if (!printArea) throw new Error("캡처 영역을 찾을 수 없습니다.");
 
-      // ★ [핵심 2] iOS Safari 버그 해결: 캐싱을 유도하는 첫 번째 더미(Dummy) 캡처
+      // iOS Safari 버그 방지를 위한 더미 캡처
       if (isMobile) {
         await toPng(printArea, getCaptureOptions()).catch(() => {});
       }
 
-      // 두 번째 실제 캡처 (모든 이미지가 브라우저에 캐싱되어 정상적으로 찍힘)
+      // 실제 캡처 생성
       const blob = await toBlob(printArea, getCaptureOptions());
-      if (!blob) throw new Error("이미지 생성 실패");
+      if (!blob) throw new Error("이미지 파일 생성에 실패했습니다.");
 
       if (type === 'share' || (type === 'download' && isMobile && navigator.share)) {
         const file = new File([blob], `APOD_${data.date}.png`, { type: 'image/png' });
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
           await navigator.share({ files: [file], title: '포토카드' });
         } else {
-          throw new Error("브라우저가 공유를 지원하지 않습니다.");
+          throw new Error("기기가 파일 공유를 지원하지 않습니다.");
         }
       } else {
         const dataUrl = URL.createObjectURL(blob);
@@ -90,13 +135,17 @@ const ResultScreen = ({ data, onHome }) => {
         URL.revokeObjectURL(dataUrl);
       }
     } catch (error) {
-      alert(`처리 중 오류가 발생했습니다: ${error.message || error}`);
+      console.error('처리 중 오류:', error);
+      alert(`[오류 상세 정보]\n${getDetailedError(error)}\n\n이 메시지를 스크린샷으로 남겨주세요.`);
     } finally {
       setIsCapturing(false);
     }
   };
 
   const isLandscape = orientation === 'landscape';
+  
+  // 두 이미지가 모두 준비되었는지 확인 (버튼 비활성화 용도)
+  const isImagesReady = nasaImageSrc && logoImageSrc;
 
   return (
     <div className="w-screen min-h-[100dvh] bg-gray-900 text-white flex flex-col items-center p-4 md:p-8 overflow-y-auto overflow-x-hidden
@@ -116,15 +165,18 @@ const ResultScreen = ({ data, onHome }) => {
                         w-[85vw] sm:w-[65vw] md:w-[50vw] lg:w-[35vw] xl:w-[28vw]
                         p-4 md:p-6 pb-12 md:pb-20 flex flex-col items-center">
           
-          {/* 1. 이미지 영역 (일반 img 태그로 롤백하여 무한 로딩 해결) */}
-          <div className="w-full aspect-square bg-black overflow-hidden relative mb-6 md:mb-10 shadow-[inset_0_2px_10px_rgba(0,0,0,0.8)]">
+          {/* 1. 이미지 영역 */}
+          <div className="w-full aspect-square bg-black overflow-hidden relative mb-6 md:mb-10 shadow-[inset_0_2px_10px_rgba(0,0,0,0.8)] flex items-center justify-center">
             {data.media_type === 'image' ? (
-              <img 
-                src={proxyUrl} 
-                crossOrigin="anonymous" 
-                className="w-full h-full object-cover" 
-                alt="NASA APOD" 
-              />
+              nasaImageSrc ? (
+                <img 
+                  src={nasaImageSrc} 
+                  className="w-full h-full object-cover" 
+                  alt="NASA APOD" 
+                />
+              ) : (
+                <div className="text-gray-500 animate-pulse text-sm font-medium">이미지 최적화 중...</div>
+              )
             ) : (
               <div className="text-center p-10 flex flex-col items-center justify-center h-full text-black">
                 <p className="text-5xl mb-4 text-white">🎥</p>
@@ -149,7 +201,6 @@ const ResultScreen = ({ data, onHome }) => {
             </div>
 
             <div className="flex flex-col items-center flex-shrink-0">
-              {/* SVG 렌더링 방식의 QR 코드 */}
               <QRCodeSVG 
                 value={data.hdurl || data.url} 
                 size={isMobile ? 64 : 100} 
@@ -158,7 +209,12 @@ const ResultScreen = ({ data, onHome }) => {
                 level={"M"} 
               />
               <span className="text-gray-900 text-[10px] md:text-xs font-black mt-2 mb-2 tracking-tighter uppercase">View Original</span>
-              <img src={logoDark} alt="With Light" className="h-5 md:h-7 mt-1 object-contain opacity-80 mix-blend-multiply" />
+              
+              {logoImageSrc ? (
+                <img src={logoImageSrc} alt="With Light" className="h-5 md:h-7 mt-1 object-contain opacity-80 mix-blend-multiply" />
+              ) : (
+                <div className="h-5 w-16 bg-gray-300 animate-pulse mt-1 rounded"></div>
+              )}
             </div>
           </div>
         </div>
@@ -173,6 +229,10 @@ const ResultScreen = ({ data, onHome }) => {
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
             처리 중...
+          </div>
+        ) : !isImagesReady ? (
+          <div className="px-6 py-3 bg-gray-600 rounded-xl font-bold text-white shadow-lg animate-pulse">
+            저장 준비 중...
           </div>
         ) : (
           <>
