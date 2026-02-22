@@ -8,7 +8,8 @@ const ResultScreen = ({ data, onHome }) => {
   const [paperSize, setPaperSize] = useState('auto');
   const [orientation, setOrientation] = useState('portrait');
   const [isMobile, setIsMobile] = useState(false);
-  const [isCapturing, setIsCapturing] = useState(false); 
+  const [isCapturing, setIsCapturing] = useState(true); 
+  const [localImageUrl, setLocalImageUrl] = useState(null);
 
   useEffect(() => {
     const savedPaperSize = localStorage.getItem('target_paper_size');
@@ -39,6 +40,37 @@ const ResultScreen = ({ data, onHome }) => {
     };
   }, [onHome]);
 
+  useEffect(() => {
+    if (!data) return;
+    
+    const rawUrl = data.url || data.hdurl;
+    const proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(rawUrl)}&w=1200&q=90&output=jpg`;
+
+    setIsCapturing(true); 
+
+    fetch(proxyUrl)
+      .then(response => {
+        if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+        return response.blob();
+      })
+      .then(blob => {
+        const localUrl = URL.createObjectURL(blob);
+        setLocalImageUrl(localUrl);
+        setIsCapturing(false); 
+      })
+      .catch(err => {
+        console.error("이미지 로컬 프리로딩 실패:", err);
+        setLocalImageUrl(proxyUrl);
+        setIsCapturing(false);
+      });
+
+    return () => {
+      if (localImageUrl) {
+        URL.revokeObjectURL(localImageUrl);
+      }
+    };
+  }, [data]);
+
   if (!data) return <div>데이터 로딩 실패</div>;
 
   const handlePrint = async () => {
@@ -63,19 +95,30 @@ const ResultScreen = ({ data, onHome }) => {
 
   const generateCanvas = async () => {
     const printArea = document.getElementById('print-area');
-    if (!printArea) throw new Error("캡처할 영역을 찾을 수 없습니다.");
+    if (!printArea) throw new Error("캔버스를 그릴 HTML DOM 영역(#print-area)을 찾을 수 없습니다.");
     
-    return await html2canvas(printArea, { 
-      useCORS: true, 
-      allowTaint: true, 
-      backgroundColor: '#ffffff',
-      scale: 2 
-    });
+    setIsCapturing(true);
+    // 렌더링을 기다리기 위해 기존보다 대기 시간을 조금 늘림
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    try {
+      const canvas = await html2canvas(printArea, { 
+        useCORS: true, 
+        allowTaint: true, 
+        backgroundColor: '#ffffff',
+        // ★ [핵심] 모바일 환경의 메모리 초과 에러 방지를 위해 모바일은 배율을 낮춥니다.
+        scale: isMobile ? 1 : 2, 
+      });
+      return canvas;
+    } catch (error) {
+      throw new Error(`html2canvas 렌더링 실패: ${error.message}`);
+    } finally {
+      setIsCapturing(false);
+    }
   };
 
   const handleDownloadImage = async () => {
     if (isCapturing) return;
-    setIsCapturing(true);
     try {
       const canvas = await generateCanvas();
       const link = document.createElement('a');
@@ -84,63 +127,57 @@ const ResultScreen = ({ data, onHome }) => {
       link.click();
     } catch (error) {
       console.error('이미지 저장 에러:', error);
-      alert('이미지 캡처 중 오류가 발생했습니다.');
-    } finally {
-      setIsCapturing(false);
+      // ★ [추가] 정확히 어떤 에러인지 화면에 띄워줍니다.
+      alert(`[오류 상세] 저장 실패\n${error.message || error}\n\n이 메시지를 캡처해서 알려주세요!`);
     }
   };
 
   const handleShare = async () => {
     if (isCapturing) return;
-    setIsCapturing(true);
+    
+    if (!navigator.canShare) {
+      alert('현재 브라우저에서는 공유 기능을 지원하지 않습니다.\n(웹사이트 링크만 복사됩니다.)');
+      try {
+        await navigator.share({ title: '우주에서 온 내 생일 사진', url: window.location.href });
+      } catch(e) {}
+      return;
+    }
 
     try {
       const canvas = await generateCanvas();
       
       canvas.toBlob(async (blob) => {
-        if (!blob) throw new Error("이미지 변환 실패");
+        if (!blob) throw new Error("캔버스를 Blob(파일) 데이터로 변환하는데 실패했습니다.");
         
         const file = new File([blob], `APOD_Photocard_${data.date}.png`, { type: 'image/png' });
 
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            title: '우주에서 온 내 생일 사진',
-            text: `${data.title} - 나만의 우주 포토카드를 확인해보세요!`,
-            files: [file], 
-          });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file] });
         } else {
-          await navigator.share({
-            title: '우주에서 온 내 생일 사진',
-            text: `${data.title} - 나만의 우주 포토카드를 확인해보세요!`,
-            url: window.location.href, 
-          });
+           throw new Error("브라우저가 파일 직접 공유를 허용하지 않습니다.");
         }
-        setIsCapturing(false);
       }, 'image/png');
       
     } catch (error) {
       console.error('공유 에러:', error);
-      alert('공유하기 기능을 실행할 수 없습니다.');
-      setIsCapturing(false);
+      // ★ [추가] 실패 시 원인을 정확히 띄웁니다.
+      alert(`[오류 상세] 공유 실패\n${error.message || error}\n\n이 메시지를 캡처해서 알려주세요! 대신 링크 공유를 시도합니다.`);
+      try {
+         await navigator.share({ title: '우주에서 온 내 생일 사진', url: window.location.href });
+      } catch (e) {}
     }
   };
 
   const isLandscape = orientation === 'landscape';
-  
-  // ★ [핵심 추가] NASA 원본 URL을 보안(CORS) 프록시 서버를 통해 우회하여 가져옵니다.
-  const rawImageUrl = data.url || data.hdurl;
-  const proxyImageUrl = rawImageUrl ? `https://wsrv.nl/?url=${encodeURIComponent(rawImageUrl)}` : '';
 
   return (
-    <div className="w-screen h-screen bg-gray-900 text-white flex flex-col items-center p-4 md:p-8 overflow-y-auto overflow-x-hidden
+    // ★ [핵심 수정] h-screen을 지우고 min-h-[100dvh]를 적용하여 모바일 브라우저 주소창 높이까지 완벽 대응
+    <div className="w-screen min-h-[100dvh] bg-gray-900 text-white flex flex-col items-center p-4 md:p-8 overflow-y-auto overflow-x-hidden
                     print:bg-white print:w-full print:h-full print:p-0 print:m-0 print:block print:overflow-visible">
       
       <style>{`
         @media print {
-          @page { 
-            size: ${paperSize} ${isLandscape ? 'landscape' : 'portrait'}; 
-            margin: 0mm; 
-          }
+          @page { size: ${paperSize} ${isLandscape ? 'landscape' : 'portrait'}; margin: 0mm; }
           body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: white; -webkit-print-color-adjust: exact; }
           #print-area {
             width: 100%; height: 100%; display: flex !important; 
@@ -151,7 +188,8 @@ const ResultScreen = ({ data, onHome }) => {
         }
       `}</style>
 
-      <div id="print-area" className={`w-full flex items-center print:text-black bg-gray-900 print:bg-white p-4 rounded-xl
+      {/* ★ [핵심 수정] my-auto를 추가하여, 화면이 길어도 항상 정중앙에 카드가 배치되도록 설정 */}
+      <div id="print-area" className={`my-auto w-full flex items-center print:text-black bg-gray-900 print:bg-white p-4 rounded-xl
             ${isLandscape ? 'max-w-5xl flex-col md:flex-row gap-4 md:gap-8' : 'max-w-4xl flex-col gap-4'}`}>
         
         <div className={`relative flex items-center justify-center bg-black rounded-3xl overflow-hidden shadow-2xl border border-gray-700 
@@ -159,11 +197,12 @@ const ResultScreen = ({ data, onHome }) => {
                         ${isLandscape ? 'w-full md:w-[65%] mb-0' : 'w-full mb-2 print:mb-4'}`}>
           {data.media_type === 'image' ? (
             <img 
-              src={proxyImageUrl} // ★ 원본 대신 프록시 URL을 사용합니다.
+              src={localImageUrl} 
               alt={data.title} 
               crossOrigin="anonymous" 
-              className={`max-w-full object-contain print:object-contain 
-              ${isLandscape ? 'max-h-[50vh] md:max-h-[80vh] print:max-h-[90vh]' : 'max-h-[50vh] md:max-h-[60vh] print:max-h-[65vh]'}`} 
+              className={`max-w-full object-contain print:object-contain transition-opacity duration-500
+              ${isLandscape ? 'max-h-[50vh] md:max-h-[80vh] print:max-h-[90vh]' : 'max-h-[50vh] md:max-h-[60vh] print:max-h-[65vh]'}
+              ${localImageUrl ? 'opacity-100' : 'opacity-0'}`} 
             />
           ) : (
             <div className="text-center p-10 flex flex-col items-center justify-center h-full print:text-black min-h-[300px]">
@@ -191,10 +230,14 @@ const ResultScreen = ({ data, onHome }) => {
         </div>
       </div>
 
-      <div className="flex flex-wrap justify-center gap-3 md:gap-4 mt-6 md:mt-10 mb-8 print:hidden z-50">
+      <div className="flex flex-wrap justify-center gap-3 md:gap-4 mt-6 mb-8 print:hidden z-50">
         {isPrinting || isCapturing ? (
-          <div className="px-6 py-3 bg-blue-600 rounded-xl font-bold text-white animate-pulse text-sm md:text-base">
-            {isCapturing ? '📸 이미지를 생성하고 있습니다...' : '🖨️ 처리 중입니다. 잠시 후 처음으로 돌아갑니다...'}
+          <div className="px-6 py-3 bg-blue-600 rounded-xl font-bold text-white animate-pulse text-sm md:text-base flex items-center">
+            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            {isCapturing ? '이미지 생성 중...' : '출력 처리 중...'}
           </div>
         ) : (
           <>

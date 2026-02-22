@@ -74,7 +74,7 @@ function App() {
           <div className="flex flex-col md:flex-row gap-4 w-full max-w-sm">
             <input 
               type="password" 
-              placeholder="Access Code (0000)"
+              placeholder="Access Code"
               // ★ [수정] 배경을 돋보이게 하고, 굵은 테두리와 큰 폰트 적용
               className="w-full bg-white text-black p-4 rounded-xl text-center text-xl font-bold border-4 border-gray-600 focus:border-blue-500 outline-none shadow-2xl transition-all placeholder-gray-400"
               value={password}
