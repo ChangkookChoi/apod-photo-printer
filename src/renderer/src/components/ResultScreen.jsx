@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-// iOS 전용 직접 그리기를 위해 숨김 처리용 QRCodeCanvas와, 화면 표시용 QRCodeSVG 둘 다 사용
 import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react'; 
 import { toPng, toBlob } from 'html-to-image';
 import { isElectron } from '../utils/env';
@@ -70,13 +69,12 @@ const ResultScreen = ({ data, onHome }) => {
     }
   });
 
-  // ★ [iOS 전용] 순수 Canvas 직접 그리기 함수 (보안 에러 100% 회피)
+  // [iOS 전용] 순수 Canvas 직접 그리기 함수 (보안 에러 100% 회피)
   const generateIOSCanvasBlob = async () => {
     return new Promise((resolve, reject) => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       
-      // 고해상도 고정 픽셀 (가로 1200px 기준)
       const padding = 120; // 캡처 시 배경 여백
       const cardW = 960;
       const cardH = 1280;
@@ -98,11 +96,10 @@ const ResultScreen = ({ data, onHome }) => {
       const img = new Image();
       img.crossOrigin = 'anonymous';
       img.onload = () => {
-        const imgSize = 840; // 좌우 60px 여백 (960 - 840 = 120)
+        const imgSize = 840; 
         const imgX = cardX + 60;
         const imgY = cardY + 60;
 
-        // object-cover (1:1 비율 크롭 계산)
         const scale = Math.max(imgSize / img.width, imgSize / img.height);
         const drawW = img.width * scale;
         const drawH = img.height * scale;
@@ -112,7 +109,7 @@ const ResultScreen = ({ data, onHome }) => {
         ctx.save();
         ctx.beginPath();
         ctx.rect(imgX, imgY, imgSize, imgSize);
-        ctx.clip(); // 1:1 박스 밖으로 삐져나가는 이미지 자르기
+        ctx.clip(); 
         ctx.drawImage(img, drawX, drawY, drawW, drawH);
         ctx.restore();
 
@@ -120,20 +117,16 @@ const ResultScreen = ({ data, onHome }) => {
         const textX = imgX;
         let textY = imgY + imgSize + 60;
 
-        // 제목
         ctx.fillStyle = '#111827';
         ctx.font = 'bold 36px sans-serif';
-        // 제목이 길면 적당히 자르기
         const titleText = data.title.length > 35 ? data.title.substring(0, 35) + '...' : data.title;
         ctx.fillText(titleText, textX, textY);
         
-        // 날짜
         textY += 45;
         ctx.fillStyle = '#6b7280';
         ctx.font = 'italic 24px sans-serif';
         ctx.fillText(data.date, textX, textY);
 
-        // 카피라이트 & 문구
         textY += 40;
         ctx.fillStyle = '#9ca3af';
         ctx.font = 'bold 18px sans-serif';
@@ -143,7 +136,7 @@ const ResultScreen = ({ data, onHome }) => {
         }
         ctx.fillText('POWERED BY NASA APOD', textX, textY);
 
-        // 5. 숨겨진 영역에서 생성된 QR 코드 복사
+        // 5. 숨겨진 QR 코드 복사
         const qrCanvas = document.getElementById('hidden-qr-canvas');
         if (qrCanvas) {
           const qrSize = 130;
@@ -157,7 +150,6 @@ const ResultScreen = ({ data, onHome }) => {
           ctx.fillText('VIEW ORIGINAL', qrX + (qrSize / 2), qrY + qrSize + 25);
         }
 
-        // 완성된 캔버스를 Blob(이미지 파일)으로 추출
         canvas.toBlob((blob) => resolve(blob), 'image/png');
       };
       img.onerror = () => reject(new Error('이미지 렌더링을 실패했습니다.'));
@@ -165,7 +157,6 @@ const ResultScreen = ({ data, onHome }) => {
     });
   };
 
-  // ★ 통합 저장/공유 핸들러
   const handleCapture = async (type) => {
     if (isCapturing) return;
     setIsCapturing(true);
@@ -174,10 +165,8 @@ const ResultScreen = ({ data, onHome }) => {
       let blob;
 
       if (isIOS) {
-        // [iOS 분기] 캔버스를 백그라운드에서 직접 그려서 보안 에러 회피
         blob = await generateIOSCanvasBlob();
       } else {
-        // [Android/PC 분기] 기존 html-to-image 사용
         const printArea = document.getElementById('print-area-wrapper');
         blob = await toBlob(printArea, getCaptureOptions());
       }
@@ -220,18 +209,16 @@ const ResultScreen = ({ data, onHome }) => {
         }
       `}</style>
 
-      {/* ★ iOS 캔버스 추출용 숨김 QR 코드 (눈에 보이지 않음) */}
+      {/* iOS 캔버스 추출용 숨김 QR 코드 */}
       <div className="hidden">
         <QRCodeCanvas id="hidden-qr-canvas" value={data.hdurl || data.url} size={250} bgColor={"#f9f9f7"} fgColor={"#111827"} level={"M"} />
       </div>
 
-      {/* 화면 표시용 & AOS 캡처용 래퍼 */}
       <div id="print-area-wrapper" className="my-auto flex flex-col items-center justify-center bg-transparent mx-auto">
         <div className="bg-[#f9f9f7] shadow-[0_20px_50px_rgba(0,0,0,0.5)] print:shadow-none border border-white/20 print:border-0
                         w-[85vw] sm:w-[65vw] md:w-[50vw] lg:w-[35vw] xl:w-[28vw]
                         p-4 md:p-6 pb-12 md:pb-20 flex flex-col items-center">
           
-          {/* 1. 이미지 영역 (기본 img 태그 사용) */}
           <div className="w-full aspect-square bg-black overflow-hidden relative mb-6 md:mb-10 shadow-[inset_0_2px_10px_rgba(0,0,0,0.8)]">
             {data.media_type === 'image' ? (
               <img 
@@ -248,7 +235,6 @@ const ResultScreen = ({ data, onHome }) => {
             )}
           </div>
 
-          {/* 2. 하단 정보 영역 */}
           <div className="w-full flex justify-between items-end px-1 gap-6 text-gray-900">
             <div className="flex flex-col flex-1 min-w-0 text-left"> 
               <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold break-keep leading-tight mb-2 tracking-tighter">
@@ -264,7 +250,6 @@ const ResultScreen = ({ data, onHome }) => {
             </div>
 
             <div className="flex flex-col items-center flex-shrink-0">
-              {/* 화면용 QR (SVG) */}
               <QRCodeSVG 
                 value={data.hdurl || data.url} 
                 size={isMobile ? 64 : 100} 
@@ -273,7 +258,6 @@ const ResultScreen = ({ data, onHome }) => {
                 level={"M"} 
               />
               <span className="text-gray-900 text-[10px] md:text-xs font-black mt-2 mb-2 tracking-tighter uppercase">View Original</span>
-              {/* 로고 완전히 삭제 완료 */}
             </div>
           </div>
         </div>
@@ -283,7 +267,7 @@ const ResultScreen = ({ data, onHome }) => {
       <div className="flex flex-wrap justify-center gap-3 md:gap-4 mt-8 mb-8 print:hidden z-50">
         {isCapturing ? (
           <div className="px-6 py-3 bg-blue-600 rounded-xl font-bold text-white shadow-lg animate-pulse">
-            이미지 최적화 중...
+            이미지 준비 중...
           </div>
         ) : (
           <>
@@ -299,16 +283,19 @@ const ResultScreen = ({ data, onHome }) => {
 
             {!isElectron() && (
               <>
+                {/* 모바일이 아닐 때(PC)만 노출되는 버튼들 */}
                 {!isMobile && (
-                  <button onClick={handlePrint} className="px-6 py-3 bg-blue-600 rounded-xl font-bold hover:bg-blue-500 shadow-lg text-sm md:text-base">
-                    인쇄 / PDF
-                  </button>
+                  <>
+                    <button onClick={handlePrint} className="px-6 py-3 bg-blue-600 rounded-xl font-bold hover:bg-blue-500 shadow-lg text-sm md:text-base">
+                      인쇄 / PDF
+                    </button>
+                    <button onClick={() => handleCapture('download')} className="px-5 md:px-6 py-3 bg-green-600 rounded-xl font-bold hover:bg-green-500 shadow-lg flex items-center gap-2 text-sm md:text-base">
+                      <span>📥</span> 저장
+                    </button>
+                  </>
                 )}
                 
-                <button onClick={() => handleCapture('download')} className="px-5 md:px-6 py-3 bg-green-600 rounded-xl font-bold hover:bg-green-500 shadow-lg flex items-center gap-2 text-sm md:text-base">
-                  <span>📥</span> 저장
-                </button>
-                
+                {/* 모바일일 때만 노출되는 공유 버튼 */}
                 {isMobile && (
                   <button onClick={() => handleCapture('share')} className="px-5 py-3 bg-indigo-600 rounded-xl font-bold hover:bg-indigo-500 shadow-lg flex items-center gap-2 text-sm md:text-base">
                     <span>🚀</span> 공유
