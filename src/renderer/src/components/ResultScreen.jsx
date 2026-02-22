@@ -100,13 +100,19 @@ const ResultScreen = ({ data, onHome }) => {
     }
   };
 
+  // ★ 공유 이미지 쏠림 방지를 위한 캡처 전용 옵션
   const getCaptureOptions = () => ({
-    backgroundColor: '#ffffff',
-    pixelRatio: isMobile ? 1 : 2,
-    style: { margin: '0', padding: '0' },
-    filter: (node) => {
-      if (node?.tagName === 'LINK' || node?.tagName === 'STYLE') return false;
-      return true;
+    backgroundColor: '#111827', // 캡처 시 배경을 어두운 톤으로 채워 카드가 돋보이게 함
+    pixelRatio: isMobile ? 2 : 2, // 고화질 유지
+    skipFonts: true,
+    style: {
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      margin: '0',
+      padding: '40px', // 카드 주변에 여백을 주어 쏠림 방지
+      width: 'auto',
+      height: 'auto'
     }
   });
 
@@ -119,7 +125,7 @@ const ResultScreen = ({ data, onHome }) => {
   const handleDownloadImage = async () => {
     if (isCapturing) return;
     setIsCapturing(true);
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise(resolve => setTimeout(resolve, 300));
 
     try {
       const printArea = document.getElementById('print-area');
@@ -149,7 +155,7 @@ const ResultScreen = ({ data, onHome }) => {
     }
 
     setIsCapturing(true);
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise(resolve => setTimeout(resolve, 300));
 
     try {
       const printArea = document.getElementById('print-area');
@@ -187,71 +193,67 @@ const ResultScreen = ({ data, onHome }) => {
           #print-area {
             width: 100%; height: 100%; display: flex !important; 
             justify-content: center; align-items: center; padding: 4mm;
-            ${paperSize.includes('A4') && !isElectron() ? `position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90%;` : ''}
           }
         }
       `}</style>
 
-      {/* 반응형 폴라로이드 레이아웃
-         max-width를 뷰포트 너비(vw) 기준으로 설정하여 화면이 커질수록 카드도 함께 커집니다.
-      */}
+      {/* ★ 폴라로이드 카드 컨테이너 (쏠림 방지를 위해 정렬 속성 강화) */}
       <div 
         id="print-area" 
-        className="my-auto w-full flex flex-col relative bg-white shadow-2xl print:shadow-none mx-auto border border-gray-200 print:border-0 
-                   max-w-[90vw] sm:max-w-[75vw] md:max-w-[60vw] lg:max-w-[45vw] xl:max-w-[35vw]
-                   h-fit p-4 md:p-6 pb-12 md:pb-20"
+        className="my-auto w-fit flex flex-col items-center justify-center relative bg-transparent print:bg-white mx-auto"
       >
-        
-        {/* 1. 이미지 영역 (1:1 비율 유지) */}
-        <div className="w-full aspect-square bg-gray-100 overflow-hidden relative mb-6 md:mb-10 shadow-inner">
-          {data.media_type === 'image' ? (
-            <canvas 
-              ref={imageCanvasRef}
-              className={`w-full h-full object-cover transition-opacity duration-500
-              ${imgLoaded ? 'opacity-100' : 'opacity-0'}`} 
-            />
-          ) : (
-            <div className="text-center p-10 flex flex-col items-center justify-center h-full text-black">
-              <p className="text-5xl mb-4">🎥</p>
-              <p className="text-xl font-bold">동영상 콘텐츠입니다.</p>
-            </div>
-          )}
-        </div>
-
-        {/* 2. 하단 정보 영역 */}
-        <div className="flex justify-between items-end px-1 gap-6">
+        {/* 실제 카드 몸체: bg-[#f9f9f7]로 아이보리 톤 적용 */}
+        <div className="bg-[#f9f9f7] shadow-[0_20px_50px_rgba(0,0,0,0.5)] print:shadow-none border border-white/20 print:border-0
+                        w-[85vw] sm:w-[65vw] md:w-[50vw] lg:w-[35vw] xl:w-[28vw]
+                        p-4 md:p-6 pb-12 md:pb-20 flex flex-col items-center">
           
-          {/* 텍스트 영역 (좌측) */}
-          <div className="flex flex-col flex-1 min-w-0"> 
-            <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-black break-keep leading-tight mb-2">
-              {data.title}
-            </h2>
-            <p className="text-gray-600 text-base md:text-lg lg:text-xl font-medium mb-4">
-              {data.date}
-            </p>
-            <div className="text-[10px] md:text-xs lg:text-sm text-gray-400 leading-snug">
-              {data.copyright && <p className="truncate">ⓒ {data.copyright}</p>}
-              <p>Powered by NASA APOD</p>
+          {/* 1. 이미지 영역 (1:1 비율) */}
+          <div className="w-full aspect-square bg-black overflow-hidden relative mb-6 md:mb-10 shadow-[inset_0_2px_10px_rgba(0,0,0,0.8)]">
+            {data.media_type === 'image' ? (
+              <canvas 
+                ref={imageCanvasRef}
+                className={`w-full h-full object-cover transition-opacity duration-500
+                ${imgLoaded ? 'opacity-100' : 'opacity-0'}`} 
+              />
+            ) : (
+              <div className="text-center p-10 flex flex-col items-center justify-center h-full text-black">
+                <p className="text-5xl mb-4">🎥</p>
+                <p className="text-xl font-bold text-white">Video Content</p>
+              </div>
+            )}
+          </div>
+
+          {/* 2. 하단 정보 영역 */}
+          <div className="w-full flex justify-between items-end px-1 gap-6">
+            <div className="flex flex-col flex-1 min-w-0"> 
+              <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-gray-900 break-keep leading-tight mb-2 tracking-tighter">
+                {data.title}
+              </h2>
+              <p className="text-gray-500 text-base md:text-lg lg:text-xl font-semibold mb-4">
+                {data.date}
+              </p>
+              <div className="text-[10px] md:text-xs lg:text-sm text-gray-400 font-medium leading-snug uppercase tracking-widest">
+                {data.copyright && <p className="truncate">ⓒ {data.copyright}</p>}
+                <p>NASA ASTRONOMY PICTURE</p>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-center flex-shrink-0">
+              <QRCodeCanvas 
+                value={data.hdurl || data.url} 
+                size={isMobile ? 64 : 100} 
+                bgColor={"#f9f9f7"} // QR 배경도 카드 색상에 맞춤
+                fgColor={"#111827"} 
+                level={"M"} 
+              />
+              <span className="text-gray-900 text-[10px] md:text-xs font-black mt-2 mb-2 tracking-tighter uppercase">View Original</span>
+              <img src={logoDark} alt="With Light" className="h-5 md:h-7 mt-1 object-contain opacity-80" />
             </div>
           </div>
-
-          {/* QR & 로고 영역 (우측) */}
-          <div className="flex flex-col items-center flex-shrink-0">
-            <QRCodeCanvas 
-              value={data.hdurl || data.url} 
-              size={isMobile ? 64 : 100} 
-              bgColor={"#ffffff"} 
-              fgColor={"#000000"} 
-              level={"M"} 
-            />
-            <span className="text-black text-[10px] md:text-xs font-bold mt-2 mb-2 tracking-widest uppercase">Scan Me</span>
-            <img src={logoDark} alt="With Light" className="h-5 md:h-7 mt-1 object-contain mix-blend-multiply" />
-          </div>
-
         </div>
       </div>
 
-      {/* 하단 버튼 영역 */}
+      {/* 버튼 영역 */}
       <div className="flex flex-wrap justify-center gap-3 md:gap-4 mt-8 mb-8 print:hidden z-50">
         {isPrinting || isCapturing ? (
           <div className="px-6 py-3 bg-blue-600 rounded-xl font-bold text-white animate-pulse text-sm md:text-base flex items-center shadow-lg">
@@ -259,7 +261,7 @@ const ResultScreen = ({ data, onHome }) => {
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            {isCapturing ? '데이터를 준비 중입니다...' : '출력 처리 중...'}
+            {isCapturing ? '카드 로딩 중...' : '출력 중...'}
           </div>
         ) : (
           <>
