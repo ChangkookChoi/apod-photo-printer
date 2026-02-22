@@ -3,26 +3,23 @@ import HomeScreen from './components/HomeScreen';
 import InputScreen from './components/InputScreen';
 import LoadingScreen from './components/LoadingScreen';
 import ResultScreen from './components/ResultScreen';
-import AdminScreen from './components/AdminScreen'; // 새로 만든 컴포넌트 임포트
+import AdminScreen from './components/AdminScreen'; 
 import { fetchApodData } from './utils/nasaApi';
 import { isWeb } from './utils/env';
 
 function App() {
-  // 상태 목록: 'loading_check', 'auth'(웹), 'home', 'input', 'loading', 'result', 'admin_auth'(관리자비번), 'admin'(설정)
   const [screen, setScreen] = useState('loading_check');
   const [apodData, setApodData] = useState(null);
   const [password, setPassword] = useState('');
 
-  // 앱이 켜지자마자 환경 체크
   useEffect(() => {
     if (isWeb()) {
-      setScreen('auth'); // 웹이면 잠금 화면으로
+      setScreen('auth'); 
     } else {
-      setScreen('home'); // 앱이면 바로 홈으로
+      setScreen('home'); 
     }
   }, []);
 
-  // 웹 접속용 비밀번호 체크 (0000)
   const checkWebAuth = () => {
     if (password === '0000') {
       setPassword('');
@@ -33,28 +30,24 @@ function App() {
     }
   };
 
-  // 관리자 메뉴 진입용 비밀번호 체크 (1234)
   const checkAdminAuth = () => {
-    if (password === '1234') { // ★ 관리자 비밀번호
+    if (password === '1234') { 
       setPassword('');
-      setScreen('admin'); // 관리자 화면으로
+      setScreen('admin'); 
     } else {
       alert('관리자 비밀번호가 틀렸습니다.');
       setPassword('');
     }
   };
 
-  // 핸들러들
   const handleStart = () => setScreen('input');
-  
-  // 홈에서 관리자 버튼 클릭 시
   const handleAdminClick = () => setScreen('admin_auth');
 
   const handleInputSubmit = async ({ year, month, day }) => {
     setScreen('loading');
     try {
       const data = await fetchApodData(year, month, day);
-      console.log(data)
+      console.log(data);
       setApodData(data);
       setScreen('result');
     } catch (error) {
@@ -69,51 +62,65 @@ function App() {
     setScreen('home');
   };
 
-  // 0. 초기화 중 (깜빡임 방지용)
   if (screen === 'loading_check') return <div className="bg-black h-screen w-screen"></div>;
 
   return (
     <div className="antialiased font-sans select-none">
       
-      {/* 1. 웹 전용 접속 잠금 화면 */}
+      {/* 1. 웹 전용 접속 잠금 화면 (시인성 대폭 개선) */}
       {screen === 'auth' && (
-        <div className="w-screen h-screen bg-black flex flex-col items-center justify-center text-white">
-          <h2 className="text-2xl font-bold mb-6">🔒 APOD Kiosk Access</h2>
-          <div className="flex gap-2">
+        <div className="w-screen h-screen bg-black flex flex-col items-center justify-center text-white px-4">
+          <h2 className="text-3xl md:text-4xl font-bold mb-8 tracking-wider text-center">🔒 APOD Kiosk Access</h2>
+          <div className="flex flex-col md:flex-row gap-4 w-full max-w-sm">
             <input 
               type="password" 
-              placeholder="Access Code"
-              className="text-black p-3 rounded-lg text-center text-xl outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Access Code (0000)"
+              // ★ [수정] 배경을 돋보이게 하고, 굵은 테두리와 큰 폰트 적용
+              className="w-full bg-white text-black p-4 rounded-xl text-center text-xl font-bold border-4 border-gray-600 focus:border-blue-500 outline-none shadow-2xl transition-all placeholder-gray-400"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && checkWebAuth()}
             />
             <button 
               onClick={checkWebAuth} 
-              className="bg-blue-600 px-6 py-3 rounded-lg font-bold hover:bg-blue-500"
+              className="w-full md:w-auto bg-blue-600 px-8 py-4 rounded-xl font-bold text-xl hover:bg-blue-500 shadow-lg active:scale-95 transition-transform"
             >
               Enter
             </button>
           </div>
-          <p className="mt-8 text-gray-500 text-sm">Authorized Personnel Only</p>
+          <p className="mt-12 text-gray-500 text-sm tracking-widest uppercase">Authorized Personnel Only</p>
         </div>
       )}
 
-      {/* 2. 관리자 비밀번호 입력 화면 */}
+      {/* 2. 관리자 비밀번호 입력 화면 (시인성 대폭 개선) */}
       {screen === 'admin_auth' && (
-        <div className="w-screen h-screen bg-gray-900 flex flex-col items-center justify-center text-white relative">
-          <button onClick={() => { setPassword(''); setScreen('home'); }} className="absolute top-8 right-8 text-gray-500 hover:text-white">닫기 ✕</button>
-          <h2 className="text-3xl font-bold mb-8">⚙️ 관리자 모드 진입</h2>
-          <p className="mb-4 text-gray-400">비밀번호를 입력하세요</p>
-          <input 
-            type="password" 
-            className="text-black p-4 rounded-xl text-center text-2xl mb-6 w-64 outline-none focus:ring-4 focus:ring-blue-500"
-            autoFocus
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && checkAdminAuth()}
-          />
-          <button onClick={checkAdminAuth} className="bg-blue-600 px-8 py-3 rounded-xl font-bold hover:bg-blue-500">확인</button>
+        <div className="w-screen h-screen bg-gray-900 flex flex-col items-center justify-center text-white relative px-4">
+          <button 
+            onClick={() => { setPassword(''); setScreen('home'); }} 
+            className="absolute top-8 right-8 text-gray-500 hover:text-white p-2 text-lg font-bold"
+          >
+            닫기 ✕
+          </button>
+          <div className="bg-gray-800 p-10 rounded-3xl shadow-2xl border border-gray-700 flex flex-col items-center w-full max-w-sm">
+            <h2 className="text-3xl font-bold mb-6 text-center">⚙️ 관리자 모드</h2>
+            <p className="mb-6 text-gray-400 text-center">설정에 진입하려면<br/>비밀번호를 입력하세요.</p>
+            <input 
+              type="password" 
+              placeholder="비밀번호 (1234)"
+              // ★ [수정] 배경, 굵은 테두리, 포커스 시 발광 효과 추가
+              className="w-full bg-white text-black p-4 rounded-xl text-center text-2xl font-bold mb-6 border-4 border-gray-600 focus:border-blue-500 outline-none shadow-inner transition-all placeholder-gray-400"
+              autoFocus
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && checkAdminAuth()}
+            />
+            <button 
+              onClick={checkAdminAuth} 
+              className="w-full bg-blue-600 py-4 rounded-xl font-bold text-xl hover:bg-blue-500 shadow-lg active:scale-95 transition-transform"
+            >
+              확인
+            </button>
+          </div>
         </div>
       )}
 
