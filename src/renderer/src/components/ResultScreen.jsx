@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { QRCodeCanvas } from 'qrcode.react';
-import html2canvas from 'html2canvas';
+import { toPng, toBlob } from 'html-to-image'; // ★ [변경] html-to-image 엔진으로 교체!
 import { isElectron } from '../utils/env';
 
 const ResultScreen = ({ data, onHome }) => {
@@ -93,42 +93,39 @@ const ResultScreen = ({ data, onHome }) => {
     }
   };
 
-  const generateCanvas = async () => {
-    const printArea = document.getElementById('print-area');
-    if (!printArea) throw new Error("캔버스를 그릴 HTML DOM 영역(#print-area)을 찾을 수 없습니다.");
-    
-    setIsCapturing(true);
-    // 렌더링을 기다리기 위해 기존보다 대기 시간을 조금 늘림
-    await new Promise(resolve => setTimeout(resolve, 300));
-
-    try {
-      const canvas = await html2canvas(printArea, { 
-        useCORS: true, 
-        allowTaint: true, 
-        backgroundColor: '#ffffff',
-        // ★ [핵심] 모바일 환경의 메모리 초과 에러 방지를 위해 모바일은 배율을 낮춥니다.
-        scale: isMobile ? 1 : 2, 
-      });
-      return canvas;
-    } catch (error) {
-      throw new Error(`html2canvas 렌더링 실패: ${error.message}`);
-    } finally {
-      setIsCapturing(false);
+  // ★ [추가] html-to-image 공통 옵션 (해상도 등)
+  const getCaptureOptions = () => ({
+    backgroundColor: '#ffffff',
+    pixelRatio: isMobile ? 1 : 2,
+    style: {
+      margin: '0',
+      padding: '4mm'
     }
-  };
+  });
 
   const handleDownloadImage = async () => {
     if (isCapturing) return;
+    setIsCapturing(true);
+    
+    // UI 업데이트 시간을 벌기 위한 약간의 딜레이
+    await new Promise(resolve => setTimeout(resolve, 150));
+
     try {
-      const canvas = await generateCanvas();
+      const printArea = document.getElementById('print-area');
+      if (!printArea) throw new Error("캡처할 영역을 찾을 수 없습니다.");
+
+      // ★ [변경] toPng를 이용해 한 번에 Base64 이미지로 굽기
+      const dataUrl = await toPng(printArea, getCaptureOptions());
+      
       const link = document.createElement('a');
       link.download = `APOD_Photocard_${data.date}.png`;
-      link.href = canvas.toDataURL('image/png');
+      link.href = dataUrl;
       link.click();
     } catch (error) {
       console.error('이미지 저장 에러:', error);
-      // ★ [추가] 정확히 어떤 에러인지 화면에 띄워줍니다.
-      alert(`[오류 상세] 저장 실패\n${error.message || error}\n\n이 메시지를 캡처해서 알려주세요!`);
+      alert(`[오류 상세] 저장 실패\n${error.message || error}`);
+    } finally {
+      setIsCapturing(false);
     }
   };
 
@@ -143,35 +140,38 @@ const ResultScreen = ({ data, onHome }) => {
       return;
     }
 
-    try {
-      const canvas = await generateCanvas();
-      
-      canvas.toBlob(async (blob) => {
-        if (!blob) throw new Error("캔버스를 Blob(파일) 데이터로 변환하는데 실패했습니다.");
-        
-        const file = new File([blob], `APOD_Photocard_${data.date}.png`, { type: 'image/png' });
+    setIsCapturing(true);
+    await new Promise(resolve => setTimeout(resolve, 150));
 
-        if (navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file] });
-        } else {
-           throw new Error("브라우저가 파일 직접 공유를 허용하지 않습니다.");
-        }
-      }, 'image/png');
+    try {
+      const printArea = document.getElementById('print-area');
+      if (!printArea) throw new Error("캡처할 영역을 찾을 수 없습니다.");
+
+      // ★ [변경] toBlob을 이용해 파일 형태로 바로 뽑아내기
+      const blob = await toBlob(printArea, getCaptureOptions());
+      if (!blob) throw new Error("이미지 파일(Blob) 생성에 실패했습니다.");
       
+      const file = new File([blob], `APOD_Photocard_${data.date}.png`, { type: 'image/png' });
+
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file] });
+      } else {
+        throw new Error("브라우저가 파일 직접 공유를 허용하지 않습니다.");
+      }
     } catch (error) {
       console.error('공유 에러:', error);
-      // ★ [추가] 실패 시 원인을 정확히 띄웁니다.
-      alert(`[오류 상세] 공유 실패\n${error.message || error}\n\n이 메시지를 캡처해서 알려주세요! 대신 링크 공유를 시도합니다.`);
+      alert(`[오류 상세] 공유 실패\n${error.message || error}`);
       try {
          await navigator.share({ title: '우주에서 온 내 생일 사진', url: window.location.href });
       } catch (e) {}
+    } finally {
+      setIsCapturing(false);
     }
   };
 
   const isLandscape = orientation === 'landscape';
 
   return (
-    // ★ [핵심 수정] h-screen을 지우고 min-h-[100dvh]를 적용하여 모바일 브라우저 주소창 높이까지 완벽 대응
     <div className="w-screen min-h-[100dvh] bg-gray-900 text-white flex flex-col items-center p-4 md:p-8 overflow-y-auto overflow-x-hidden
                     print:bg-white print:w-full print:h-full print:p-0 print:m-0 print:block print:overflow-visible">
       
@@ -188,7 +188,6 @@ const ResultScreen = ({ data, onHome }) => {
         }
       `}</style>
 
-      {/* ★ [핵심 수정] my-auto를 추가하여, 화면이 길어도 항상 정중앙에 카드가 배치되도록 설정 */}
       <div id="print-area" className={`my-auto w-full flex items-center print:text-black bg-gray-900 print:bg-white p-4 rounded-xl
             ${isLandscape ? 'max-w-5xl flex-col md:flex-row gap-4 md:gap-8' : 'max-w-4xl flex-col gap-4'}`}>
         
