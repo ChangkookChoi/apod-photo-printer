@@ -234,7 +234,7 @@ const ResultScreen = ({ data, onHome }) => {
               </p>
               <div className="text-[10px] md:text-xs lg:text-sm text-gray-400 font-medium leading-snug uppercase tracking-widest">
                 {data.copyright && <p className="truncate">ⓒ {data.copyright}</p>}
-                <p>NASA ASTRONOMY PICTURE</p>
+                <p>Powered by NASA APOD</p>
               </div>
             </div>
 
