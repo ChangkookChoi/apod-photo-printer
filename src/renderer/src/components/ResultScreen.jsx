@@ -66,30 +66,27 @@ const ResultScreen = ({ data, onHome }) => {
     }
   });
 
-  // ★ [모바일 전용] 순수 Canvas 직접 그리기 함수 (AOS/iOS 보안 에러 100% 회피)
+  // [모바일 전용] 순수 Canvas 직접 그리기 (안전한 우회)
   const generateMobileCanvasBlob = async () => {
     return new Promise((resolve, reject) => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       
-      const padding = 120; // 캡처 시 배경 여백
+      const padding = 120; 
       const cardW = 960;
       const cardH = 1280;
       
       canvas.width = cardW + (padding * 2);
       canvas.height = cardH + (padding * 2);
 
-      // 1. 전체 다크 그레이 배경
       ctx.fillStyle = '#111827';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // 2. 카드 배경 (아이보리)
       const cardX = padding;
       const cardY = padding;
       ctx.fillStyle = '#f9f9f7';
       ctx.fillRect(cardX, cardY, cardW, cardH);
 
-      // 3. NASA 이미지 로드 및 1:1 크롭 그리기
       const img = new Image();
       img.crossOrigin = 'anonymous';
       img.onload = () => {
@@ -110,7 +107,6 @@ const ResultScreen = ({ data, onHome }) => {
         ctx.drawImage(img, drawX, drawY, drawW, drawH);
         ctx.restore();
 
-        // 4. 텍스트 정보 입력
         const textX = imgX;
         let textY = imgY + imgSize + 60;
 
@@ -133,7 +129,6 @@ const ResultScreen = ({ data, onHome }) => {
         }
         ctx.fillText('POWERED BY NASA APOD', textX, textY);
 
-        // 5. 숨겨진 QR 코드 복사
         const qrCanvas = document.getElementById('hidden-qr-canvas');
         if (qrCanvas) {
           const qrSize = 130;
@@ -162,10 +157,8 @@ const ResultScreen = ({ data, onHome }) => {
       let blob;
 
       if (isMobile) {
-        // ★ [수정] iOS뿐만 아니라 모든 모바일(안드로이드 포함)에서 가장 안전한 캔버스 직접 그리기 사용
         blob = await generateMobileCanvasBlob();
       } else {
-        // PC 웹에서는 기존 html-to-image 사용
         const printArea = document.getElementById('print-area-wrapper');
         blob = await toBlob(printArea, getCaptureOptions());
       }
@@ -195,6 +188,9 @@ const ResultScreen = ({ data, onHome }) => {
   };
 
   const isLandscape = orientation === 'landscape';
+  
+  // ★ 용지 설정이 4x6 이거나 자동(auto)일 때만 물리적 4x6 모드 활성화
+  const is4x6Mode = paperSize === '4in 6in' || paperSize === 'auto';
 
   return (
     <div className="w-screen min-h-[100dvh] bg-gray-900 text-white flex flex-col items-center p-4 md:p-8 overflow-y-auto overflow-x-hidden
@@ -204,7 +200,55 @@ const ResultScreen = ({ data, onHome }) => {
         @media print {
           @page { size: ${paperSize} ${isLandscape ? 'landscape' : 'portrait'}; margin: 0mm; }
           body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: white; -webkit-print-color-adjust: exact; }
-          #print-area-wrapper { width: 100%; height: 100%; display: flex !important; justify-content: center; align-items: center; }
+          
+          /* 기본 (A4 등) 출력 래퍼: 중앙 정렬 유지 */
+          #print-area-wrapper { 
+            width: 100% !important; 
+            height: 100% !important; 
+            display: flex !important; 
+            justify-content: center; 
+            align-items: center; 
+          }
+
+          /* 4x6 전용 래퍼: 중앙 정렬 해제 및 맥OS 백지 오류 방지용 블록 처리 */
+          #print-area-wrapper.strict-4x6-wrapper {
+            display: block !important;
+            height: auto !important;
+            padding-top: 5mm !important; /* 상단 여백 */
+          }
+          
+          /* 4x6 물리 규격 강제 고정 (A4일 때는 적용 안 됨) */
+          .strict-4x6-mode {
+            width: 4in !important;
+            height: 6in !important;
+            max-width: none !important;
+            margin: 0 auto !important; 
+            padding: 0.25in !important;
+            box-sizing: border-box !important;
+            page-break-inside: avoid;
+            display: flex !important;
+            flex-direction: column !important;
+          }
+
+          .strict-4x6-mode .photo-image-area {
+            width: 3.5in !important; 
+            height: 3.5in !important;
+            margin-bottom: 0.3in !important;
+          }
+
+          .strict-4x6-mode .photo-info-area {
+            flex: 1 !important;
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: flex-end !important;
+            padding: 0 !important;
+          }
+          
+          .strict-4x6-mode .print-text-title { font-size: 16pt !important; line-height: 1.1 !important; margin-bottom: 2mm !important; white-space: normal !important; }
+          .strict-4x6-mode .print-text-date { font-size: 11pt !important; margin-bottom: 3mm !important; }
+          .strict-4x6-mode .print-text-copy { font-size: 8pt !important; }
+          .strict-4x6-mode .print-qr-area svg { width: 0.8in !important; height: 0.8in !important; }
+          .strict-4x6-mode .print-qr-text { font-size: 7pt !important; margin-top: 2mm !important; }
         }
       `}</style>
 
@@ -213,13 +257,12 @@ const ResultScreen = ({ data, onHome }) => {
         <QRCodeCanvas id="hidden-qr-canvas" value={data.hdurl || data.url} size={250} bgColor={"#ffffff"} fgColor={"#000000"} level={"M"} />
       </div>
 
-      <div id="print-area-wrapper" className="my-auto flex flex-col items-center justify-center bg-transparent mx-auto">
-        {/* ★ [수정] print:bg-white 속성을 추가하여 인쇄 시 불필요한 바탕색(아이보리) 잉크 낭비 방지 */}
-        <div className="bg-[#f9f9f7] print:bg-white shadow-[0_20px_50px_rgba(0,0,0,0.5)] print:shadow-none border border-white/20 print:border-0
+      <div id="print-area-wrapper" className={`my-auto flex flex-col items-center justify-center bg-transparent mx-auto ${is4x6Mode ? 'strict-4x6-wrapper' : ''}`}>
+        <div className={`bg-[#f9f9f7] print:bg-white shadow-[0_20px_50px_rgba(0,0,0,0.5)] print:shadow-none border border-white/20 print:border-0
                         w-[85vw] sm:w-[65vw] md:w-[50vw] lg:w-[35vw] xl:w-[28vw]
-                        p-4 md:p-6 pb-12 md:pb-20 flex flex-col items-center">
+                        p-4 md:p-6 pb-12 md:pb-20 flex flex-col items-center ${is4x6Mode ? 'strict-4x6-mode' : ''}`}>
           
-          <div className="w-full aspect-square bg-black print:bg-transparent overflow-hidden relative mb-6 md:mb-10 shadow-[inset_0_2px_10px_rgba(0,0,0,0.8)] print:shadow-none">
+          <div className="photo-image-area w-full aspect-square bg-black print:bg-transparent overflow-hidden relative mb-6 md:mb-10 shadow-[inset_0_2px_10px_rgba(0,0,0,0.8)] print:shadow-none">
             {data.media_type === 'image' ? (
               <>
                 {!imgLoaded && <div className="absolute inset-0 flex items-center justify-center text-gray-500 animate-pulse text-sm">사진 인화 중...</div>}
@@ -233,27 +276,27 @@ const ResultScreen = ({ data, onHome }) => {
               </>
             ) : (
               <div className="text-center p-10 flex flex-col items-center justify-center h-full text-black">
-                <p className="text-5xl mb-4 text-white">🎥</p>
+                <p className="text-5xl mb-4 text-white print:text-black">🎥</p>
                 <p className="text-xl font-bold text-white print:text-black">Video Content</p>
               </div>
             )}
           </div>
 
-          <div className="w-full flex justify-between items-end px-1 gap-6 text-gray-900 print:text-black">
+          <div className="photo-info-area w-full flex justify-between items-end px-1 gap-6 text-gray-900 print:text-black">
             <div className="flex flex-col flex-1 min-w-0 text-left"> 
-              <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold break-keep leading-tight mb-2 tracking-tighter">
+              <h2 className="print-text-title text-2xl md:text-3xl lg:text-4xl font-bold break-keep leading-tight mb-2 tracking-tighter">
                 {data.title}
               </h2>
-              <p className="text-gray-500 print:text-gray-700 text-base md:text-lg lg:text-xl font-semibold mb-4 italic">
+              <p className="print-text-date text-gray-500 print:text-gray-700 text-base md:text-lg lg:text-xl font-semibold mb-4 italic">
                 {data.date}
               </p>
-              <div className="text-[10px] md:text-xs lg:text-sm text-gray-400 print:text-gray-600 font-medium leading-snug uppercase tracking-widest">
+              <div className="print-text-copy text-[10px] md:text-xs lg:text-sm text-gray-400 print:text-gray-600 font-medium leading-snug uppercase tracking-widest">
                 {data.copyright && <p className="truncate text-left">ⓒ {data.copyright}</p>}
                 <p className="text-left font-bold text-gray-500 print:text-gray-800">Powered by NASA APOD</p>
               </div>
             </div>
 
-            <div className="flex flex-col items-center flex-shrink-0">
+            <div className="print-qr-area flex flex-col items-center flex-shrink-0">
               <QRCodeSVG 
                 value={data.hdurl || data.url} 
                 size={isMobile ? 64 : 100} 
@@ -261,7 +304,7 @@ const ResultScreen = ({ data, onHome }) => {
                 fgColor={"#000000"} 
                 level={"M"} 
               />
-              <span className="text-gray-900 print:text-black text-[10px] md:text-xs font-black mt-2 mb-2 tracking-tighter uppercase">View Original</span>
+              <span className="print-qr-text text-gray-900 print:text-black text-[10px] md:text-xs font-black mt-2 mb-2 tracking-tighter uppercase">View Original</span>
             </div>
           </div>
         </div>
@@ -271,7 +314,7 @@ const ResultScreen = ({ data, onHome }) => {
       <div className="flex flex-wrap justify-center gap-3 md:gap-4 mt-8 mb-8 print:hidden z-50">
         {isCapturing ? (
           <div className="px-6 py-3 bg-blue-600 rounded-xl font-bold text-white shadow-lg animate-pulse">
-            이미지 준비 중...
+            처리 중...
           </div>
         ) : (
           <>
