@@ -8,21 +8,18 @@ const ResultScreen = ({ data, onHome }) => {
   const [paperSize, setPaperSize] = useState('auto');
   const [orientation, setOrientation] = useState('portrait');
   const [isMobile, setIsMobile] = useState(false);
-  const [isIOS, setIsIOS] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false); 
+  const [imgLoaded, setImgLoaded] = useState(false);
 
   useEffect(() => {
     const savedPaperSize = localStorage.getItem('target_paper_size');
     setPaperSize(savedPaperSize || (isElectron() ? 'auto' : 'A4'));
     setOrientation(localStorage.getItem('target_orientation') || 'portrait');
     
-    // 모바일 및 iOS 감지
+    // 모바일 감지 (iOS, Android 모두 포함)
     const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-    setIsMobile(/iPhone|iPad|iPod|Android/i.test(userAgent));
-    
-    // MacIntel 플랫폼에서 터치포인트가 있는 경우(아이패드) 포함
-    const iosCheck = /iPad|iPhone|iPod/.test(userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    setIsIOS(iosCheck);
+    const mobileCheck = /iPhone|iPad|iPod|Android/i.test(userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    setIsMobile(mobileCheck);
 
     const timer = setTimeout(() => onHome(), 60000);
     return () => clearTimeout(timer);
@@ -50,7 +47,7 @@ const ResultScreen = ({ data, onHome }) => {
     }
   };
 
-  // [Android & PC 전용] 캡처 옵션
+  // [PC 전용] 캡처 옵션
   const getCaptureOptions = () => ({
     backgroundColor: '#111827',
     pixelRatio: 2,
@@ -69,8 +66,8 @@ const ResultScreen = ({ data, onHome }) => {
     }
   });
 
-  // [iOS 전용] 순수 Canvas 직접 그리기 함수 (보안 에러 100% 회피)
-  const generateIOSCanvasBlob = async () => {
+  // ★ [모바일 전용] 순수 Canvas 직접 그리기 함수 (AOS/iOS 보안 에러 100% 회피)
+  const generateMobileCanvasBlob = async () => {
     return new Promise((resolve, reject) => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
@@ -164,9 +161,11 @@ const ResultScreen = ({ data, onHome }) => {
     try {
       let blob;
 
-      if (isIOS) {
-        blob = await generateIOSCanvasBlob();
+      if (isMobile) {
+        // ★ [수정] iOS뿐만 아니라 모든 모바일(안드로이드 포함)에서 가장 안전한 캔버스 직접 그리기 사용
+        blob = await generateMobileCanvasBlob();
       } else {
+        // PC 웹에서는 기존 html-to-image 사용
         const printArea = document.getElementById('print-area-wrapper');
         blob = await toBlob(printArea, getCaptureOptions());
       }
@@ -209,43 +208,48 @@ const ResultScreen = ({ data, onHome }) => {
         }
       `}</style>
 
-      {/* iOS 캔버스 추출용 숨김 QR 코드 */}
+      {/* 모바일 캔버스 추출용 숨김 QR 코드 */}
       <div className="hidden">
-        <QRCodeCanvas id="hidden-qr-canvas" value={data.hdurl || data.url} size={250} bgColor={"#f9f9f7"} fgColor={"#111827"} level={"M"} />
+        <QRCodeCanvas id="hidden-qr-canvas" value={data.hdurl || data.url} size={250} bgColor={"#ffffff"} fgColor={"#000000"} level={"M"} />
       </div>
 
       <div id="print-area-wrapper" className="my-auto flex flex-col items-center justify-center bg-transparent mx-auto">
-        <div className="bg-[#f9f9f7] shadow-[0_20px_50px_rgba(0,0,0,0.5)] print:shadow-none border border-white/20 print:border-0
+        {/* ★ [수정] print:bg-white 속성을 추가하여 인쇄 시 불필요한 바탕색(아이보리) 잉크 낭비 방지 */}
+        <div className="bg-[#f9f9f7] print:bg-white shadow-[0_20px_50px_rgba(0,0,0,0.5)] print:shadow-none border border-white/20 print:border-0
                         w-[85vw] sm:w-[65vw] md:w-[50vw] lg:w-[35vw] xl:w-[28vw]
                         p-4 md:p-6 pb-12 md:pb-20 flex flex-col items-center">
           
-          <div className="w-full aspect-square bg-black overflow-hidden relative mb-6 md:mb-10 shadow-[inset_0_2px_10px_rgba(0,0,0,0.8)]">
+          <div className="w-full aspect-square bg-black print:bg-transparent overflow-hidden relative mb-6 md:mb-10 shadow-[inset_0_2px_10px_rgba(0,0,0,0.8)] print:shadow-none">
             {data.media_type === 'image' ? (
-              <img 
-                src={proxyUrl} 
-                crossOrigin="anonymous" 
-                className="w-full h-full object-cover" 
-                alt="NASA APOD" 
-              />
+              <>
+                {!imgLoaded && <div className="absolute inset-0 flex items-center justify-center text-gray-500 animate-pulse text-sm">사진 인화 중...</div>}
+                <img 
+                  src={proxyUrl} 
+                  crossOrigin="anonymous" 
+                  onLoad={() => setImgLoaded(true)}
+                  className={`w-full h-full object-cover transition-opacity duration-500 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`} 
+                  alt="NASA APOD" 
+                />
+              </>
             ) : (
               <div className="text-center p-10 flex flex-col items-center justify-center h-full text-black">
                 <p className="text-5xl mb-4 text-white">🎥</p>
-                <p className="text-xl font-bold text-white">Video Content</p>
+                <p className="text-xl font-bold text-white print:text-black">Video Content</p>
               </div>
             )}
           </div>
 
-          <div className="w-full flex justify-between items-end px-1 gap-6 text-gray-900">
+          <div className="w-full flex justify-between items-end px-1 gap-6 text-gray-900 print:text-black">
             <div className="flex flex-col flex-1 min-w-0 text-left"> 
               <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold break-keep leading-tight mb-2 tracking-tighter">
                 {data.title}
               </h2>
-              <p className="text-gray-500 text-base md:text-lg lg:text-xl font-semibold mb-4 italic">
+              <p className="text-gray-500 print:text-gray-700 text-base md:text-lg lg:text-xl font-semibold mb-4 italic">
                 {data.date}
               </p>
-              <div className="text-[10px] md:text-xs lg:text-sm text-gray-400 font-medium leading-snug uppercase tracking-widest">
+              <div className="text-[10px] md:text-xs lg:text-sm text-gray-400 print:text-gray-600 font-medium leading-snug uppercase tracking-widest">
                 {data.copyright && <p className="truncate text-left">ⓒ {data.copyright}</p>}
-                <p className="text-left font-bold text-gray-500">Powered by NASA APOD</p>
+                <p className="text-left font-bold text-gray-500 print:text-gray-800">Powered by NASA APOD</p>
               </div>
             </div>
 
@@ -253,11 +257,11 @@ const ResultScreen = ({ data, onHome }) => {
               <QRCodeSVG 
                 value={data.hdurl || data.url} 
                 size={isMobile ? 64 : 100} 
-                bgColor={"#f9f9f7"} 
-                fgColor={"#111827"} 
+                bgColor={"#ffffff"} 
+                fgColor={"#000000"} 
                 level={"M"} 
               />
-              <span className="text-gray-900 text-[10px] md:text-xs font-black mt-2 mb-2 tracking-tighter uppercase">View Original</span>
+              <span className="text-gray-900 print:text-black text-[10px] md:text-xs font-black mt-2 mb-2 tracking-tighter uppercase">View Original</span>
             </div>
           </div>
         </div>
@@ -283,7 +287,6 @@ const ResultScreen = ({ data, onHome }) => {
 
             {!isElectron() && (
               <>
-                {/* 모바일이 아닐 때(PC)만 노출되는 버튼들 */}
                 {!isMobile && (
                   <>
                     <button onClick={handlePrint} className="px-6 py-3 bg-blue-600 rounded-xl font-bold hover:bg-blue-500 shadow-lg text-sm md:text-base">
@@ -295,7 +298,6 @@ const ResultScreen = ({ data, onHome }) => {
                   </>
                 )}
                 
-                {/* 모바일일 때만 노출되는 공유 버튼 */}
                 {isMobile && (
                   <button onClick={() => handleCapture('share')} className="px-5 py-3 bg-indigo-600 rounded-xl font-bold hover:bg-indigo-500 shadow-lg flex items-center gap-2 text-sm md:text-base">
                     <span>🚀</span> 공유
