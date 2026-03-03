@@ -42,3 +42,6 @@ APOD 기반 포토카드 출력 서비스
 
 exe 빌드 명렁어
 npm run build && npx electron-builder --win --x64
+
+dmg 빌드 명령어
+npm run build:mac

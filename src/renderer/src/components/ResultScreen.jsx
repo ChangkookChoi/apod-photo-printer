@@ -13,7 +13,8 @@ const ResultScreen = ({ data, onHome }) => {
 
   useEffect(() => {
     const savedPaperSize = localStorage.getItem('target_paper_size');
-    setPaperSize(savedPaperSize || (isElectron() ? 'auto' : 'A4'));
+    // ★ [수정] 웹 환경의 기본값을 A4가 아닌 'auto'로 변경하여 브라우저 인쇄 창의 설정을 그대로 수용하게 함
+    setPaperSize(savedPaperSize || 'auto');
     setOrientation(localStorage.getItem('target_orientation') || 'portrait');
     
     // 모바일 감지 (iOS, Android 모두 포함)
@@ -47,7 +48,6 @@ const ResultScreen = ({ data, onHome }) => {
     }
   };
 
-  // [PC 전용] 캡처 옵션
   const getCaptureOptions = () => ({
     backgroundColor: '#111827',
     pixelRatio: 2,
@@ -66,7 +66,6 @@ const ResultScreen = ({ data, onHome }) => {
     }
   });
 
-  // [모바일 전용] 순수 Canvas 직접 그리기 (안전한 우회)
   const generateMobileCanvasBlob = async () => {
     return new Promise((resolve, reject) => {
       const canvas = document.createElement('canvas');
@@ -188,8 +187,6 @@ const ResultScreen = ({ data, onHome }) => {
   };
 
   const isLandscape = orientation === 'landscape';
-  
-  // ★ 용지 설정이 4x6 이거나 자동(auto)일 때만 물리적 4x6 모드 활성화
   const is4x6Mode = paperSize === '4in 6in' || paperSize === 'auto';
 
   return (
@@ -198,34 +195,44 @@ const ResultScreen = ({ data, onHome }) => {
       
       <style>{`
         @media print {
-          @page { size: ${paperSize} ${isLandscape ? 'landscape' : 'portrait'}; margin: 0mm; }
+          /* ★ [수정] paperSize가 'auto'이면 브라우저의 인쇄 다이얼로그 설정을 무조건 따름 */
+          @page { size: ${paperSize === 'auto' ? 'auto' : paperSize} ${isLandscape ? 'landscape' : 'portrait'}; margin: 0mm; }
           body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: white; -webkit-print-color-adjust: exact; }
           
-          /* 기본 (A4 등) 출력 래퍼: 중앙 정렬 유지 */
+          /* 공통: 카드가 페이지 중간에 쪼개지는 현상(Page Break) 완벽 차단 */
+          .photo-card-container {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+
+          /* 기본 (A4 등) 출력 래퍼 */
           #print-area-wrapper { 
             width: 100% !important; 
             height: 100% !important; 
             display: flex !important; 
             justify-content: center; 
             align-items: center; 
+            margin: 0 !important;
+            padding: 0 !important;
           }
 
-          /* 4x6 전용 래퍼: 중앙 정렬 해제 및 맥OS 백지 오류 방지용 블록 처리 */
+          /* 4x6 전용 래퍼: 맥OS 백지 오류 방지용 블록 처리 & 5mm 여백 제거하여 넘침 방지 */
           #print-area-wrapper.strict-4x6-wrapper {
             display: block !important;
-            height: auto !important;
-            padding-top: 5mm !important; /* 상단 여백 */
+            height: 100vh !important;
+            padding: 0 !important; 
+            margin: 0 !important;
           }
           
-          /* 4x6 물리 규격 강제 고정 (A4일 때는 적용 안 됨) */
+          /* 4x6 물리 규격 강제 고정 */
           .strict-4x6-mode {
             width: 4in !important;
             height: 6in !important;
-            max-width: none !important;
+            max-width: 100vw !important; /* 웹 환경에서 종이가 더 작을 때 잘림 방어 */
+            max-height: 100vh !important;
             margin: 0 auto !important; 
             padding: 0.25in !important;
             box-sizing: border-box !important;
-            page-break-inside: avoid;
             display: flex !important;
             flex-direction: column !important;
           }
@@ -258,7 +265,7 @@ const ResultScreen = ({ data, onHome }) => {
       </div>
 
       <div id="print-area-wrapper" className={`my-auto flex flex-col items-center justify-center bg-transparent mx-auto ${is4x6Mode ? 'strict-4x6-wrapper' : ''}`}>
-        <div className={`bg-[#f9f9f7] print:bg-white shadow-[0_20px_50px_rgba(0,0,0,0.5)] print:shadow-none border border-white/20 print:border-0
+        <div className={`photo-card-container bg-[#f9f9f7] print:bg-white shadow-[0_20px_50px_rgba(0,0,0,0.5)] print:shadow-none border border-white/20 print:border-0
                         w-[85vw] sm:w-[65vw] md:w-[50vw] lg:w-[35vw] xl:w-[28vw]
                         p-4 md:p-6 pb-12 md:pb-20 flex flex-col items-center ${is4x6Mode ? 'strict-4x6-mode' : ''}`}>
           
