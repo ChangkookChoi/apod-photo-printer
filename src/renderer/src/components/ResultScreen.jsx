@@ -13,11 +13,9 @@ const ResultScreen = ({ data, onHome }) => {
 
   useEffect(() => {
     const savedPaperSize = localStorage.getItem('target_paper_size');
-    // ★ [수정] 웹 환경의 기본값을 A4가 아닌 'auto'로 변경하여 브라우저 인쇄 창의 설정을 그대로 수용하게 함
     setPaperSize(savedPaperSize || 'auto');
     setOrientation(localStorage.getItem('target_orientation') || 'portrait');
     
-    // 모바일 감지 (iOS, Android 모두 포함)
     const userAgent = navigator.userAgent || navigator.vendor || window.opera;
     const mobileCheck = /iPhone|iPad|iPod|Android/i.test(userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     setIsMobile(mobileCheck);
@@ -195,17 +193,14 @@ const ResultScreen = ({ data, onHome }) => {
       
       <style>{`
         @media print {
-          /* ★ [수정] paperSize가 'auto'이면 브라우저의 인쇄 다이얼로그 설정을 무조건 따름 */
           @page { size: ${paperSize === 'auto' ? 'auto' : paperSize} ${isLandscape ? 'landscape' : 'portrait'}; margin: 0mm; }
           body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: white; -webkit-print-color-adjust: exact; }
           
-          /* 공통: 카드가 페이지 중간에 쪼개지는 현상(Page Break) 완벽 차단 */
           .photo-card-container {
             page-break-inside: avoid !important;
             break-inside: avoid !important;
           }
 
-          /* 기본 (A4 등) 출력 래퍼 */
           #print-area-wrapper { 
             width: 100% !important; 
             height: 100% !important; 
@@ -216,7 +211,6 @@ const ResultScreen = ({ data, onHome }) => {
             padding: 0 !important;
           }
 
-          /* 4x6 전용 래퍼: 맥OS 백지 오류 방지용 블록 처리 & 5mm 여백 제거하여 넘침 방지 */
           #print-area-wrapper.strict-4x6-wrapper {
             display: block !important;
             height: 100vh !important;
@@ -224,42 +218,47 @@ const ResultScreen = ({ data, onHome }) => {
             margin: 0 !important;
           }
           
-          /* 4x6 물리 규격 강제 고정 */
+          /* ★ 수정됨: 비율 교정 (웹 화면과 동일한 폴라로이드 패딩 밸런스) */
           .strict-4x6-mode {
             width: 4in !important;
             height: 6in !important;
-            max-width: 100vw !important; /* 웹 환경에서 종이가 더 작을 때 잘림 방어 */
+            max-width: 100vw !important; 
             max-height: 100vh !important;
             margin: 0 auto !important; 
-            padding: 0.25in !important;
+            /* 폴라로이드 감성: 상, 좌, 우는 0.2인치, 하단은 0.4인치로 세팅 */
+            padding: 0.2in 0.2in 0.4in 0.2in !important;
             box-sizing: border-box !important;
             display: flex !important;
             flex-direction: column !important;
           }
 
+          /* ★ 수정됨: 너비를 100%로 풀어서 아래 텍스트 영역과 폭을 완벽하게 맞춤 */
           .strict-4x6-mode .photo-image-area {
-            width: 3.5in !important; 
-            height: 3.5in !important;
-            margin-bottom: 0.3in !important;
+            width: 100% !important; 
+            height: 3.6in !important; /* 4인치 - (좌우 0.2 + 0.2) = 정확히 3.6인치 정사각형 */
+            margin-bottom: 0.2in !important;
           }
 
           .strict-4x6-mode .photo-info-area {
             flex: 1 !important;
+            width: 100% !important;
             display: flex !important;
             justify-content: space-between !important;
             align-items: flex-end !important;
-            padding: 0 !important;
+            padding: 0 0.05in !important; /* 좌우 미세 정렬 (px-1 효과) */
+            box-sizing: border-box !important;
           }
           
-          .strict-4x6-mode .print-text-title { font-size: 16pt !important; line-height: 1.1 !important; margin-bottom: 2mm !important; white-space: normal !important; }
+          /* 폰트 및 요소 크기를 웹 비율에 맞춰 튜닝 */
+          .strict-4x6-mode .print-text-title { font-size: 15pt !important; line-height: 1.1 !important; margin-bottom: 2mm !important; white-space: normal !important; letter-spacing: -0.5px !important; }
           .strict-4x6-mode .print-text-date { font-size: 11pt !important; margin-bottom: 3mm !important; }
-          .strict-4x6-mode .print-text-copy { font-size: 8pt !important; }
-          .strict-4x6-mode .print-qr-area svg { width: 0.8in !important; height: 0.8in !important; }
-          .strict-4x6-mode .print-qr-text { font-size: 7pt !important; margin-top: 2mm !important; }
+          .strict-4x6-mode .print-text-copy { font-size: 7.5pt !important; line-height: 1.2 !important; }
+          .strict-4x6-mode .print-text-copy p { margin: 0 !important; }
+          .strict-4x6-mode .print-qr-area svg { width: 0.7in !important; height: 0.7in !important; }
+          .strict-4x6-mode .print-qr-text { font-size: 6.5pt !important; margin-top: 2mm !important; }
         }
       `}</style>
 
-      {/* 모바일 캔버스 추출용 숨김 QR 코드 */}
       <div className="hidden">
         <QRCodeCanvas id="hidden-qr-canvas" value={data.hdurl || data.url} size={250} bgColor={"#ffffff"} fgColor={"#000000"} level={"M"} />
       </div>
@@ -317,7 +316,6 @@ const ResultScreen = ({ data, onHome }) => {
         </div>
       </div>
 
-      {/* 하단 버튼 영역 */}
       <div className="flex flex-wrap justify-center gap-3 md:gap-4 mt-8 mb-8 print:hidden z-50">
         {isCapturing ? (
           <div className="px-6 py-3 bg-blue-600 rounded-xl font-bold text-white shadow-lg animate-pulse">
